@@ -41,10 +41,11 @@
         .tab-btn.active { background-color: #2563eb; color: white; border-color: #2563eb; }
         .tab-btn { background-color: transparent; color: #9ca3af; border: 1px solid #4b5563; }
 
-        /* Animation cho Popover danh sách user */
-        #user-list-popover { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
-        #user-list-popover.hidden { opacity: 0; transform: scale(0.95) translateY(10px); pointer-events: none; display: block; visibility: hidden;}
-        #user-list-popover:not(.hidden) { opacity: 1; transform: scale(1) translateY(0); visibility: visible;}
+        /* Animation cho Popover */
+        .popover-enter { opacity: 0; transform: scale(0.95) translateY(-10px); }
+        .popover-enter-active { opacity: 1; transform: scale(1) translateY(0); transition: all 0.2s ease-out; }
+        .popover-exit { opacity: 1; transform: scale(1) translateY(0); }
+        .popover-exit-active { opacity: 0; transform: scale(0.95) translateY(-10px); transition: all 0.15s ease-in; }
     </style>
 </head>
 <body class="school-bg text-gray-100 min-h-screen font-sans overflow-x-hidden">
@@ -167,20 +168,27 @@
                         <h3 class="text-lg font-bold flex items-center gap-2">
                             <i class="fa-solid fa-keyboard text-blue-400"></i> Nhập liệu
                         </h3>
-                        <div class="flex gap-2">
-                            <button id="mic-btn" class="w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors relative">
-                                <i class="fa-solid fa-microphone text-white"></i>
-                                <span class="mic-pulse absolute inset-0 rounded-full bg-red-500 opacity-0"></span>
-                            </button>
-                            <label for="ocr-input" class="w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors cursor-pointer">
-                                <i class="fa-solid fa-camera text-white"></i>
-                            </label>
-                            <input type="file" id="ocr-input" accept="image/*" class="hidden">
-                        </div>
+                        
+                        <!-- TOGGLE ENTER TO SEND (Mới thêm) -->
+                        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none bg-gray-900/50 px-3 py-1 rounded-full border border-gray-600 hover:border-blue-500 transition-colors" title="Bật để ấn Enter là gửi luôn (PC). Tắt để ấn Enter xuống dòng (Mobile)">
+                            <input type="checkbox" id="enter-to-send" class="w-3.5 h-3.5 accent-blue-500 rounded cursor-pointer">
+                            Enter gửi
+                        </label>
                     </div>
 
-                    <textarea id="text-input" rows="5" class="w-full bg-gray-900/80 border border-gray-600 rounded-xl p-4 text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none custom-scrollbar font-mono text-sm" 
-                    placeholder="Nhập: 12a1 di muon, nguyen van b 10c2 toc..."></textarea>
+                    <div class="flex gap-2 mb-2 justify-end">
+                         <button id="mic-btn" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors relative" title="Nhập giọng nói">
+                            <i class="fa-solid fa-microphone text-white text-xs"></i>
+                            <span class="mic-pulse absolute inset-0 rounded-full bg-red-500 opacity-0"></span>
+                        </button>
+                        <label for="ocr-input" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors cursor-pointer" title="Quét ảnh">
+                            <i class="fa-solid fa-camera text-white text-xs"></i>
+                        </label>
+                        <input type="file" id="ocr-input" accept="image/*" class="hidden">
+                    </div>
+
+                    <textarea id="text-input" rows="5" class="w-full bg-gray-900 border border-gray-600 rounded-xl p-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none custom-scrollbar font-mono text-sm" 
+                    placeholder="VD: 12a1 di muon..."></textarea>
                     
                     <div id="ocr-loading" class="hidden mt-2">
                         <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
@@ -220,14 +228,46 @@
             <!-- LIST SECTION -->
             <div class="lg:col-span-7">
                 <div class="bg-gray-800/60 backdrop-blur-md rounded-2xl border border-gray-700 shadow-xl flex flex-col h-[calc(100vh-6rem)]">
-                    <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/80 rounded-t-2xl">
-                        <h3 class="font-bold text-white flex items-center gap-2">
-                            <i class="fa-solid fa-list-check text-blue-400"></i> Danh sách vi phạm
-                            <span id="count-badge" class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
-                        </h3>
-                        <button id="clear-all-btn" class="hidden text-xs bg-red-900/50 text-red-300 px-3 py-1.5 rounded hover:bg-red-900 border border-red-800 transition-colors">
-                            <i class="fa-solid fa-trash"></i> Xóa Hết
-                        </button>
+                    <div class="p-4 border-b border-gray-700 bg-gray-800/80 rounded-t-2xl space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-blue-400"></i> Danh sách vi phạm
+                                <span id="count-badge" class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
+                            </h3>
+                            <button id="clear-all-btn" class="hidden text-xs bg-red-900/50 text-red-300 px-3 py-1.5 rounded hover:bg-red-900 border border-red-800 transition-colors">
+                                <i class="fa-solid fa-trash"></i> Xóa Hết
+                            </button>
+                        </div>
+                        
+                        <!-- DISPLAY SETTINGS BAR -->
+                        <div class="relative">
+                            <button onclick="toggleDisplayMenu()" class="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg border border-gray-600 text-xs font-medium text-gray-200 transition-colors">
+                                <i class="fa-solid fa-eye"></i> Tuỳ chỉnh hiển thị
+                                <i class="fa-solid fa-chevron-down text-[10px] ml-1"></i>
+                            </button>
+                            
+                            <!-- Dropdown Menu -->
+                            <div id="display-menu" class="absolute top-10 left-0 w-48 bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-3 z-20 hidden transform origin-top-left transition-all">
+                                <div class="space-y-2">
+                                    <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
+                                        <input type="checkbox" id="show-time" checked class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
+                                        <span class="text-sm text-gray-200 select-none">Thời gian nhập</span>
+                                    </label>
+                                    <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
+                                        <input type="checkbox" id="show-name" checked class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
+                                        <span class="text-sm text-gray-200 select-none">Họ và Tên</span>
+                                    </label>
+                                    <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
+                                        <input type="checkbox" id="show-class" checked class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
+                                        <span class="text-sm text-gray-200 select-none">Lớp</span>
+                                    </label>
+                                    <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
+                                        <input type="checkbox" id="show-reporter" checked class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
+                                        <span class="text-sm text-gray-200 select-none">Người Báo</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="report-container" class="flex-1 overflow-auto custom-scrollbar p-4">
@@ -299,6 +339,14 @@
         let currentUser = { name: '', role: '' };
         let violationsData = [];
         let isHost = false;
+        
+        // --- DISPLAY SETTINGS STATE ---
+        let displaySettings = {
+            time: true,
+            name: true,
+            class: true,
+            reporter: true
+        };
 
         // --- UI UTILS ---
         function showToast(title, message, type = 'info') {
@@ -357,6 +405,10 @@
                 document.getElementById('clear-all-btn').classList.remove('hidden');
                 document.getElementById('connected-users-bubble').classList.remove('hidden'); // Show bubble for Host
             }
+            
+            // Tự động kiểm tra thiết bị để set toggle Enter
+            const isMobile = window.innerWidth <= 768;
+            document.getElementById('enter-to-send').checked = !isMobile;
         }
 
         function copyPin() {
@@ -693,7 +745,7 @@
             document.getElementById('count-badge').textContent = violationsData.length;
             
             if (violationsData.length === 0) {
-                container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60"><i class="fa-solid fa-clipboard-check text-6xl mb-4"></i><p>Sạch sẽ, chưa có vi phạm</p></div>`;
+                container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60"><i class="fa-solid fa-clipboard-check text-6xl mb-4"></i><p>Không tìm thấy vi phạm nào</p></div>`;
                 return;
             }
 
@@ -718,10 +770,10 @@
                         <thead class="bg-gray-800/60 text-xs uppercase text-gray-400">
                             <tr>
                                 <th class="p-3 w-10 text-center">#</th>
-                                <th class="p-3 w-16 text-center">Giờ</th>
-                                <th class="p-3">Họ và Tên</th>
-                                <th class="p-3 w-20 text-center">Lớp</th>
-                                <th class="p-3 w-20 text-right text-[10px]">Người báo</th>
+                                ${displaySettings.time ? '<th class="p-3 w-16 text-center">Giờ</th>' : ''}
+                                ${displaySettings.name ? '<th class="p-3">Họ và Tên</th>' : ''}
+                                ${displaySettings.class ? '<th class="p-3 w-20 text-center">Lớp</th>' : ''}
+                                ${displaySettings.reporter ? '<th class="p-3 w-20 text-right text-[10px]">Người báo</th>' : ''}
                                 <th class="p-3 w-8"></th>
                             </tr>
                         </thead>
@@ -732,10 +784,10 @@
                     html += `
                     <tr class="hover:bg-gray-700/30 transition-colors group">
                         <td class="p-3 text-gray-500 font-mono text-sm text-center">${sttTotal++}</td>
-                        <td class="p-3 text-gray-400 font-mono text-sm text-center">${timeStr}</td>
-                        <td class="p-3 font-medium text-gray-200">${s.name}</td>
-                        <td class="p-3 text-center"><span class="bg-gray-700 text-yellow-400 px-2 py-1 rounded text-xs font-bold font-mono border border-gray-600">${s.class}</span></td>
-                        <td class="p-3 text-right text-gray-500 text-[10px] italic">${s.reporter || ''}</td>
+                        ${displaySettings.time ? `<td class="p-3 text-gray-400 font-mono text-sm text-center">${timeStr}</td>` : ''}
+                        ${displaySettings.name ? `<td class="p-3 font-medium text-gray-200">${s.name}</td>` : ''}
+                        ${displaySettings.class ? `<td class="p-3 text-center"><span class="bg-gray-700 text-yellow-400 px-2 py-1 rounded text-xs font-bold font-mono border border-gray-600">${s.class}</span></td>` : ''}
+                        ${displaySettings.reporter ? `<td class="p-3 text-right text-gray-500 text-[10px] italic">${s.reporter || ''}</td>` : ''}
                         <td class="p-3 text-center">
                             <button onclick="deleteRow('${s.id}')" class="text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-1">
                                 <i class="fa-solid fa-xmark"></i>
@@ -765,6 +817,28 @@
             }
         });
 
+        // --- DISPLAY SETTINGS LOGIC ---
+        function toggleDisplayMenu() {
+            document.getElementById('display-menu').classList.toggle('hidden');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('display-menu');
+            const btn = document.querySelector('button[onclick="toggleDisplayMenu()"]');
+            if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // Checkbox listeners
+        ['time', 'name', 'class', 'reporter'].forEach(key => {
+            document.getElementById(`show-${key}`).addEventListener('change', (e) => {
+                displaySettings[key] = e.target.checked;
+                renderReport();
+            });
+        });
+
         // --- EVENT LISTENERS ---
         document.getElementById('process-btn').addEventListener('click', () => {
             const input = document.getElementById('text-input');
@@ -778,6 +852,19 @@
             } else {
                 showToast('Thông tin', 'Không nhận dạng được', 'warning');
             }
+        });
+
+        // --- FIX: Restore Enter to Send functionality with Toggle ---
+        document.getElementById('text-input').addEventListener('keydown', (e) => {
+            // Kiểm tra xem nút gạt có đang bật không
+            const enterToSend = document.getElementById('enter-to-send').checked;
+            
+            // Nếu bật chế độ "Enter gửi" VÀ không giữ phím Shift
+            if (enterToSend && e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Ngăn xuống dòng
+                document.getElementById('process-btn').click(); // Gửi luôn
+            }
+            // Ngược lại (Tắt chế độ hoặc giữ Shift): Mặc định là xuống dòng
         });
 
         // OCR & Voice (Same as old logic)
