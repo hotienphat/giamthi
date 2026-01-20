@@ -15,7 +15,10 @@ const VIOLATION_MAP = {
     'KHONG_TRUC_NHAT': { label: 'Không trực nhật', keys: ['truc nhat', 've sinh', 'quet lop'] }
 };
 
-const CLIENT_SESSION_KEY = 'GiamThiAI_Client_Session'; // Key lưu phiên làm việc
+// --- STORAGE KEYS ---
+const CLIENT_SESSION_KEY = 'GiamThiAI_Client_Session'; // Lưu phiên khách
+const HOST_SESSION_KEY = 'GiamThiAI_Host_Session';     // Lưu phiên chủ
+const HOST_DATA_KEY = 'GiamThiAI_P2P_Data';            // Lưu dữ liệu lỗi
 
 // --- GLOBAL STATE ---
 let peer = null;
@@ -95,7 +98,8 @@ function switchToMainApp(pin) {
     
     // Tự động kiểm tra thiết bị để set toggle Enter
     const isMobile = window.innerWidth <= 768;
-    document.getElementById('enter-to-send').checked = !isMobile;
+    const enterToggle = document.getElementById('enter-to-send');
+    if(enterToggle) enterToggle.checked = !isMobile;
 }
 
 function copyPin() {
@@ -105,12 +109,13 @@ function copyPin() {
 }
 
 function logout() {
-    if(confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt.')) {
+    if(confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt và dữ liệu phiên làm việc sẽ bị xóa.')) {
         if(peer) peer.destroy();
         
-        // Xóa dữ liệu phiên làm việc để không tự động đăng nhập lại
+        // Xóa sạch dữ liệu lưu trữ
         localStorage.removeItem(CLIENT_SESSION_KEY);
-        if(isHost) localStorage.removeItem('GiamThiAI_P2P_Data');
+        localStorage.removeItem(HOST_SESSION_KEY);
+        localStorage.removeItem(HOST_DATA_KEY);
         
         location.reload();
     }
@@ -170,10 +175,16 @@ function createRoom() {
     isHost = true;
     
     // Generate a simpler ID for PeerJS
-    // Format: GT-XXXXXX (GT = GiamThi)
     const randomPin = Math.floor(100000 + Math.random() * 900000);
     myId = `GT-${randomPin}`;
-    hostId = myId; // Set hostId for host so export works
+    hostId = myId; 
+
+    // LƯU PHIÊN HOST VÀO LOCALSTORAGE
+    localStorage.setItem(HOST_SESSION_KEY, JSON.stringify({
+        name: name,
+        role: 'HOST',
+        pin: randomPin
+    }));
 
     initPeer(myId);
 }
@@ -200,14 +211,13 @@ function joinRoom() {
     isHost = false;
     hostId = `GT-${pin}`;
     
-    // --- LƯU PHIÊN LÀM VIỆC ---
+    // LƯU PHIÊN KHÁCH VÀO LOCALSTORAGE
     localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({
         pin: pin,
         name: finalName,
         role: role
     }));
     
-    // Client gets a random ID
     initPeer();
 }
 
@@ -244,11 +254,31 @@ function initPeer(customId = null) {
     peer.on('error', (err) => {
         console.error(err);
         if(err.type === 'unavailable-id') {
+            // Nếu là Host đang khôi phục phiên mà ID bị trùng (do chưa thoát hẳn)
+            if (isHost && localStorage.getItem(HOST_SESSION_KEY)) {
+                showToast('Thông báo', 'Mã phòng cũ đang kẹt, tạo mã mới nhưng giữ nguyên dữ liệu!', 'warning');
+                // Tạo ID mới nhưng vẫn giữ isHost = true và load lại data cũ
+                const newPin = Math.floor(100000 + Math.random() * 900000);
+                myId = `GT-${newPin}`;
+                hostId = myId;
+                
+                // Cập nhật lại session storage với PIN mới
+                const currentSession = JSON.parse(localStorage.getItem(HOST_SESSION_KEY));
+                currentSession.pin = newPin;
+                localStorage.setItem(HOST_SESSION_KEY, JSON.stringify(currentSession));
+                
+                initPeer(myId); // Thử lại với ID mới
+                return;
+            }
+            
             alert('Mã phòng này đang được sử dụng hoặc chưa đóng hẳn. Hãy thử lại.');
+            localStorage.removeItem(CLIENT_SESSION_KEY); // Xóa phiên lỗi
             location.reload();
         } else if(err.type === 'peer-unavailable') {
             showToast('Lỗi', 'Không tìm thấy phòng! Hãy kiểm tra mã PIN.', 'error');
             updateStatus('Không tìm thấy Host', 'red');
+            // Nếu là Client đang reconnect mà không thấy host -> Xóa session để login lại
+            // localStorage.removeItem(CLIENT_SESSION_KEY); 
         } else {
             showToast('Lỗi', 'Lỗi kết nối P2P.', 'error');
         }
@@ -257,22 +287,15 @@ function initPeer(customId = null) {
 
 // --- HOST LOGIC ---
 function handleIncomingConnection(c) {
-    // Khi có kết nối mới, đợi nó mở để lấy metadata
     c.on('open', () => {
-        // Thêm vào danh sách connections
         connections.push(c);
-        
-        // Lấy thông tin từ metadata (nếu có)
         const clientName = c.metadata?.name || 'Ẩn danh';
         const clientRole = c.metadata?.role || 'Unknown';
         
         showToast('Kết nối mới', `${clientName} (${clientRole}) đã vào phòng`);
         updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
-        
-        // Update danh sách user UI
         updateUserListUI();
 
-        // Gửi dữ liệu hiện tại cho máy mới
         c.send({ type: 'SYNC_FULL', data: violationsData });
     });
 
@@ -281,16 +304,14 @@ function handleIncomingConnection(c) {
     });
 
     c.on('close', () => {
-        // Xóa khỏi danh sách
         connections = connections.filter(conn => conn !== c);
         updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
         updateUserListUI();
     });
     
-    // Xử lý khi mất kết nối đột ngột
     c.on('error', () => {
-            connections = connections.filter(conn => conn !== c);
-            updateUserListUI();
+        connections = connections.filter(conn => conn !== c);
+        updateUserListUI();
     });
 }
 
@@ -304,7 +325,6 @@ function broadcast(packet) {
 function connectToHost(id) {
     updateStatus('Đang tìm máy chủ...', 'yellow');
     
-    // Gửi kèm thông tin (metadata) khi kết nối
     conn = peer.connect(id, {
         metadata: {
             name: currentUser.name,
@@ -338,10 +358,8 @@ function handleDataPacket(packet) {
         renderReport();
         if(isHost) saveDataLocal();
     } else if (packet.type === 'ADD_ITEMS') {
-        // Received new items
         violationsData = [...violationsData, ...packet.items];
         renderReport();
-        
         if (isHost) {
             saveDataLocal();
             broadcast({ type: 'SYNC_FULL', data: violationsData });
@@ -362,10 +380,8 @@ function handleDataPacket(packet) {
 
 function sendData(packet) {
     if (isHost) {
-        // If Host generates data, handle locally then broadcast
         handleDataPacket(packet);
     } else {
-        // If Client, send to Host
         if (conn && conn.open) {
             conn.send(packet);
         } else {
@@ -376,16 +392,16 @@ function sendData(packet) {
 
 // --- STORAGE (HOST ONLY) ---
 function saveDataLocal() {
-    if(isHost) localStorage.setItem('GiamThiAI_P2P_Data', JSON.stringify(violationsData));
+    if(isHost) localStorage.setItem(HOST_DATA_KEY, JSON.stringify(violationsData));
 }
 function loadDataLocal() {
-    const saved = localStorage.getItem('GiamThiAI_P2P_Data');
+    const saved = localStorage.getItem(HOST_DATA_KEY);
     if(saved) {
         try { violationsData = JSON.parse(saved); } catch(e) {}
     }
 }
 
-// --- PROCESSING LOGIC (SAME AS BEFORE) ---
+// --- PROCESSING LOGIC ---
 const toTitleCase = str => str.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase());
 const removeAccents = str => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 
@@ -506,22 +522,20 @@ window.deleteRow = (id) => {
 document.getElementById('clear-all-btn').addEventListener('click', () => {
     if(confirm('Xóa TẤT CẢ dữ liệu trên các máy?')) {
         sendData({ type: 'CLEAR_ALL' });
-        // If Host, also clear local immediately handled by sendData->handleDataPacket logic if written carefully
-            if(isHost) {
-                violationsData = [];
-                renderReport();
-                saveDataLocal();
-                broadcast({ type: 'CLEAR_ALL' });
-            }
+        if(isHost) {
+            violationsData = [];
+            renderReport();
+            saveDataLocal();
+            broadcast({ type: 'CLEAR_ALL' });
+        }
     }
 });
 
-// --- DISPLAY SETTINGS LOGIC ---
+// --- DISPLAY SETTINGS ---
 function toggleDisplayMenu() {
     document.getElementById('display-menu').classList.toggle('hidden');
 }
 
-// Close menu when clicking outside
 document.addEventListener('click', (e) => {
     const menu = document.getElementById('display-menu');
     const btn = document.getElementById('toggle-display-btn');
@@ -530,7 +544,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Checkbox listeners
 ['time', 'name', 'class', 'reporter'].forEach(key => {
     const el = document.getElementById(`show-${key}`);
     if(el) {
@@ -542,7 +555,6 @@ document.addEventListener('click', (e) => {
 });
 
 // --- EVENT LISTENERS ---
-// Create & Join buttons need explicit listeners in separated JS if not inline
 document.getElementById('btn-create-room').addEventListener('click', createRoom);
 document.getElementById('btn-join-room').addEventListener('click', joinRoom);
 document.getElementById('btn-logout').addEventListener('click', logout);
@@ -564,20 +576,14 @@ document.getElementById('process-btn').addEventListener('click', () => {
     }
 });
 
-// --- FIX: Restore Enter to Send functionality with Toggle ---
 document.getElementById('text-input').addEventListener('keydown', (e) => {
-    // Kiểm tra xem nút gạt có đang bật không
     const enterToSend = document.getElementById('enter-to-send').checked;
-    
-    // Nếu bật chế độ "Enter gửi" VÀ không giữ phím Shift
     if (enterToSend && e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); // Ngăn xuống dòng
-        document.getElementById('process-btn').click(); // Gửi luôn
+        e.preventDefault(); 
+        document.getElementById('process-btn').click(); 
     }
-    // Ngược lại (Tắt chế độ hoặc giữ Shift): Mặc định là xuống dòng
 });
 
-// OCR & Voice (Same as old logic)
 document.getElementById('ocr-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -605,13 +611,10 @@ if ('webkitSpeechRecognition' in window) {
     recognition.onend = () => document.querySelector('.mic-pulse').classList.remove('active');
 } else { document.getElementById('mic-btn').style.display = 'none'; }
 
-// Export PNG (Fixed)
 document.getElementById('export-png-btn').addEventListener('click', () => {
     if (violationsData.length === 0) return showToast('Lỗi', 'Chưa có dữ liệu để xuất', 'error');
-    
     showToast('Đang xử lý', 'Đang tạo phiếu báo cáo...');
     
-    // 1. Tạo container ẩn để render phiếu
     const exportDiv = document.createElement('div');
     Object.assign(exportDiv.style, { 
         position: 'fixed', top: '0', left: '-9999px', zIndex: '9999', 
@@ -619,7 +622,6 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
         fontFamily: "'Be Vietnam Pro', sans-serif", padding: '40px', boxSizing: 'border-box' 
     });
 
-    // 2. Chuẩn bị dữ liệu
     const groupedData = {};
     violationsData.forEach(s => { 
         const v = s.violation || 'Lỗi khác'; 
@@ -627,7 +629,6 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
         groupedData[v].push(s); 
     });
 
-    // 3. Render HTML danh sách lỗi
     let groupsHtml = '';
     let sttTotal = 1;
     const formatTime = (iso) => new Date(iso).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
@@ -666,7 +667,6 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
             </div>`;
     }
 
-    // 4. Render phần Header và Footer
     const logoHtml = `<img src="https://files.catbox.moe/jyg7qk.webp" style="width: 80px; height: 80px; object-fit: contain; display: block; margin: 0 auto 15px;" crossorigin="anonymous">`;
     const dateStr = new Date().toLocaleDateString('vi-VN');
     const roleText = currentUser.role === 'HOST' ? `Giám thị: ${currentUser.name}` : `Người xuất: ${currentUser.name} (${currentUser.role})`;
@@ -681,7 +681,7 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
             <div style="padding: 20px; background-color: #f8fafc; border-bottom: 2px solid #e5e7eb; font-size: 14px; display: flex; justify-content: space-between;">
                 <div>
                     <div><span style="color: #64748b; font-weight: 600;">Ngày:</span> <b>${dateStr}</b></div>
-                    <div><span style="color: #64748b; font-weight: 600;">Mã phòng:</span> <b>#${hostId.replace('GT-','') || 'OFFLINE'}</b></div>
+                    <div><span style="color: #64748b; font-weight: 600;">Mã phòng:</span> <b>#${hostId ? hostId.replace('GT-','') : 'OFFLINE'}</b></div>
                 </div>
                 <div style="text-align: right;">
                         <div>${roleText}</div>
@@ -697,7 +697,6 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
 
     document.body.appendChild(exportDiv);
 
-    // 5. Chụp ảnh bằng html2canvas
     setTimeout(() => {
         html2canvas(exportDiv, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
             const link = document.createElement('a');
@@ -711,10 +710,9 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
             if (document.body.contains(exportDiv)) document.body.removeChild(exportDiv);
             showToast('Lỗi', 'Không thể tạo ảnh (Lỗi CORS hoặc thư viện)', 'error');
         });
-    }, 500); // Đợi render xong
+    }, 500);
 });
 
-// Export Excel (Simplified)
 document.getElementById('export-excel-btn').addEventListener('click', () => {
     if(violationsData.length === 0) return;
     const wb = XLSX.utils.book_new();
@@ -725,31 +723,43 @@ document.getElementById('export-excel-btn').addEventListener('click', () => {
     XLSX.writeFile(wb, `DS_Loi_${hostId || 'Offline'}.xlsx`);
 });
 
-// Clock
 setInterval(() => document.getElementById('realtime-clock').textContent = new Date().toLocaleTimeString('vi-VN', { hour12: false }), 1000);
 
 // --- AUTO RESTORE SESSION ON LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
-    const savedSession = localStorage.getItem(CLIENT_SESSION_KEY);
-    if(savedSession) {
+    // 1. Kiểm tra session Khách
+    const savedClientSession = localStorage.getItem(CLIENT_SESSION_KEY);
+    if(savedClientSession) {
         try {
-            const sess = JSON.parse(savedSession);
+            const sess = JSON.parse(savedClientSession);
             if(sess && sess.pin) {
-                console.log('Phát hiện phiên cũ, đang khôi phục:', sess);
-                // Khôi phục state
+                console.log('Phát hiện phiên khách cũ:', sess);
                 currentUser = { name: sess.name, role: sess.role };
                 isHost = false;
                 hostId = `GT-${sess.pin}`;
-                
-                // Cập nhật UI (ẩn login)
                 showToast('Khôi phục', 'Đang kết nối lại phòng cũ...');
-                
-                // Kết nối lại
                 initPeer();
+                return; // Thoát luôn nếu là khách
             }
-        } catch(e) {
-            console.error('Lỗi khôi phục phiên:', e);
-            localStorage.removeItem(CLIENT_SESSION_KEY);
-        }
+        } catch(e) { console.error(e); localStorage.removeItem(CLIENT_SESSION_KEY); }
+    }
+
+    // 2. Kiểm tra session Chủ (Host)
+    const savedHostSession = localStorage.getItem(HOST_SESSION_KEY);
+    if(savedHostSession) {
+        try {
+            const sess = JSON.parse(savedHostSession);
+            if(sess && sess.pin) {
+                console.log('Phát hiện phiên Host cũ:', sess);
+                currentUser = { name: sess.name, role: 'HOST' };
+                isHost = true;
+                myId = `GT-${sess.pin}`;
+                hostId = myId;
+                
+                showToast('Khôi phục', 'Đang khôi phục phòng máy chủ...');
+                initPeer(myId); // Khởi tạo lại với ID cũ
+                // Data sẽ được load trong initPeer -> 'open'
+            }
+        } catch(e) { console.error(e); localStorage.removeItem(HOST_SESSION_KEY); }
     }
 });
