@@ -15,6 +15,8 @@ const VIOLATION_MAP = {
     'KHONG_TRUC_NHAT': { label: 'Không trực nhật', keys: ['truc nhat', 've sinh', 'quet lop'] }
 };
 
+const CLIENT_SESSION_KEY = 'GiamThiAI_Client_Session'; // Key lưu phiên làm việc
+
 // --- GLOBAL STATE ---
 let peer = null;
 let conn = null; // Client connection to host
@@ -105,6 +107,11 @@ function copyPin() {
 function logout() {
     if(confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt.')) {
         if(peer) peer.destroy();
+        
+        // Xóa dữ liệu phiên làm việc để không tự động đăng nhập lại
+        localStorage.removeItem(CLIENT_SESSION_KEY);
+        if(isHost) localStorage.removeItem('GiamThiAI_P2P_Data');
+        
         location.reload();
     }
 }
@@ -192,6 +199,13 @@ function joinRoom() {
     currentUser = { name: finalName, role: role };
     isHost = false;
     hostId = `GT-${pin}`;
+    
+    // --- LƯU PHIÊN LÀM VIỆC ---
+    localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({
+        pin: pin,
+        name: finalName,
+        role: role
+    }));
     
     // Client gets a random ID
     initPeer();
@@ -713,3 +727,29 @@ document.getElementById('export-excel-btn').addEventListener('click', () => {
 
 // Clock
 setInterval(() => document.getElementById('realtime-clock').textContent = new Date().toLocaleTimeString('vi-VN', { hour12: false }), 1000);
+
+// --- AUTO RESTORE SESSION ON LOAD ---
+document.addEventListener('DOMContentLoaded', () => {
+    const savedSession = localStorage.getItem(CLIENT_SESSION_KEY);
+    if(savedSession) {
+        try {
+            const sess = JSON.parse(savedSession);
+            if(sess && sess.pin) {
+                console.log('Phát hiện phiên cũ, đang khôi phục:', sess);
+                // Khôi phục state
+                currentUser = { name: sess.name, role: sess.role };
+                isHost = false;
+                hostId = `GT-${sess.pin}`;
+                
+                // Cập nhật UI (ẩn login)
+                showToast('Khôi phục', 'Đang kết nối lại phòng cũ...');
+                
+                // Kết nối lại
+                initPeer();
+            }
+        } catch(e) {
+            console.error('Lỗi khôi phục phiên:', e);
+            localStorage.removeItem(CLIENT_SESSION_KEY);
+        }
+    }
+});
