@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trợ Lý Giám Thị AI - P2P Sync</title>
+    <!-- Thư viện giao diện và xử lý -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src='https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js'></script>
+    <!-- PeerJS: Thư viện kết nối P2P Miễn phí -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Be Vietnam Pro', sans-serif; -webkit-font-smoothing: antialiased; }
+        .school-bg { 
+            background-color: #0f172a; 
+            background-image: radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                            radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+                            radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%); 
+            background-attachment: fixed; 
+            background-size: cover; 
+        }
+        @media (max-width: 768px) {
+            .school-bg { background-attachment: scroll; background-image: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); }
+            .backdrop-blur-xl, .backdrop-blur-md, .backdrop-blur-sm { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background-color: rgba(31, 41, 55, 0.98) !important; }
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(31, 41, 55, 0.5); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #60a5fa; }
+        @keyframes pulse-ring { 0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .mic-pulse.active { animation: pulse-ring 2s infinite; opacity: 1; background-color: #ef4444; }
+        .dashed-border { border: 2px dashed #4b5563; transition: all 0.3s; }
+        .dashed-border:hover { border-color: #60a5fa; background-color: rgba(31, 41, 55, 0.5); }
+        
+        .tab-btn.active { background-color: #2563eb; color: white; border-color: #2563eb; }
+        .tab-btn { background-color: transparent; color: #9ca3af; border: 1px solid #4b5563; }
+    </style>
+</head>
+<body class="school-bg text-gray-100 min-h-screen font-sans overflow-x-hidden">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/95 backdrop-blur-xl">
+        <div class="w-full max-w-md p-6 bg-gray-800/80 rounded-2xl border border-gray-700 shadow-2xl transform transition-all">
+            <div class="text-center mb-6">
+                <div class="mx-auto w-20 h-20 mb-3 flex items-center justify-center">
+                    <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo" class="w-full h-full object-contain drop-shadow-xl">
+                </div>
+                <h1 class="text-2xl font-bold text-white uppercase tracking-wider">Hệ Thống Trực Nề Nếp</h1>
+                <p class="text-gray-400 text-xs mt-1">Kết nối P2P miễn phí (Không cần Server)</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-2 mb-6">
+                <button onclick="switchTab('create')" id="tab-create" class="tab-btn active flex-1 py-2 rounded-lg font-medium text-sm transition-all">
+                    <i class="fa-solid fa-server"></i> Tạo Máy Chủ
+                </button>
+                <button onclick="switchTab('join')" id="tab-join" class="tab-btn flex-1 py-2 rounded-lg font-medium text-sm transition-all">
+                    <i class="fa-solid fa-link"></i> Kết Nối
+                </button>
+            </div>
+
+            <!-- Create Room Form (Host) -->
+            <div id="form-create" class="space-y-4">
+                <div class="bg-blue-900/20 p-3 rounded-lg border border-blue-500/30 text-xs text-blue-200">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    Bạn sẽ là máy chủ. Hãy giữ trình duyệt mở để các máy khác kết nối.
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên Giám Thị (Host)</label>
+                    <input type="text" id="host-name" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none" placeholder="Nhập tên thầy/cô...">
+                </div>
+                <button onclick="createRoom()" id="btn-create-room" class="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-wifi"></i> Tạo Phòng Ngay
+                </button>
+            </div>
+
+            <!-- Join Room Form (Client) -->
+            <div id="form-join" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Mã Phòng (6 số)</label>
+                    <input type="number" id="join-pin" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white font-mono text-center tracking-widest text-lg focus:border-green-500 outline-none" placeholder="xxxxxx">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Đăng nhập với tư cách</label>
+                    <select id="join-role" onchange="togglePasswordInput()" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none">
+                        <option value="">-- Chọn vai trò --</option>
+                        <option value="MONITOR">Giám thị phụ</option>
+                        <option value="12A1">Lớp 12A1</option>
+                        <option value="12A2">Lớp 12A2</option>
+                        <option value="12A3">Lớp 12A3</option>
+                        <option value="12A4">Lớp 12A4</option>
+                        <option value="12A5">Lớp 12A5</option>
+                        <option value="12A6">Lớp 12A6</option>
+                    </select>
+                </div>
+                
+                <div id="password-field" class="hidden">
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Mật khẩu lớp</label>
+                    <input type="password" id="join-password" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none" placeholder="Nhập mật khẩu...">
+                </div>
+
+                <div id="guest-name-field" class="hidden">
+                     <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên của bạn</label>
+                    <input type="text" id="guest-name" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none" placeholder="Nhập tên...">
+                </div>
+
+                <button onclick="joinRoom()" id="btn-join-room" class="w-full py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plug"></i> Kết Nối
+                </button>
+            </div>
+            
+             <div class="mt-4 p-3 bg-gray-700/30 rounded-lg border border-gray-700 text-xs text-gray-400">
+                <p><strong>Mật khẩu demo:</strong> 12A1: 1231, 12A2: 1232...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <main id="main-app" class="container mx-auto p-4 lg:p-6 max-w-7xl hidden opacity-0 transition-opacity duration-500">
+        <!-- Header Info -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-6 bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
+            <div class="flex items-center gap-4 w-full md:w-auto">
+                <div class="flex flex-col">
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span id="display-role" class="bg-blue-600 text-xs px-2 py-1 rounded">HOST</span>
+                        <span id="display-name">Giám thị</span>
+                    </h2>
+                    <p class="text-sm text-gray-300 flex items-center gap-2 mt-1">
+                        <span id="connection-status-dot" class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
+                        <span id="connection-status-text">Đang kết nối...</span>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3 mt-4 md:mt-0">
+                <div id="pin-container" class="hidden bg-blue-900/30 px-4 py-2 rounded-xl border border-blue-500/50 flex flex-col items-end">
+                    <span class="text-[10px] text-blue-300 uppercase font-bold">Mã Phòng</span>
+                    <span id="display-pin" class="font-mono font-bold text-white text-xl tracking-wider select-all cursor-pointer" title="Click để copy" onclick="copyPin()">------</span>
+                </div>
+                <div class="flex items-center gap-2 bg-gray-900/50 px-4 py-2 rounded-xl border border-gray-700">
+                    <i class="fa-regular fa-clock text-blue-400"></i>
+                    <span id="realtime-clock" class="font-mono font-semibold text-gray-200">00:00:00</span>
+                </div>
+                <button onclick="logout()" class="p-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg border border-red-900/50 transition-colors" title="Thoát">
+                    <i class="fa-solid fa-power-off"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- INPUT SECTION -->
+            <div class="lg:col-span-5 space-y-6">
+                <!-- AI Input Box -->
+                <div class="bg-gray-800/60 backdrop-blur-md p-6 rounded-2xl border border-gray-700 shadow-xl relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <i class="fa-solid fa-keyboard text-blue-400"></i> Nhập liệu
+                        </h3>
+                        <div class="flex gap-2">
+                            <button id="mic-btn" class="w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors relative">
+                                <i class="fa-solid fa-microphone text-white"></i>
+                                <span class="mic-pulse absolute inset-0 rounded-full bg-red-500 opacity-0"></span>
+                            </button>
+                            <label for="ocr-input" class="w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors cursor-pointer">
+                                <i class="fa-solid fa-camera text-white"></i>
+                            </label>
+                            <input type="file" id="ocr-input" accept="image/*" class="hidden">
+                        </div>
+                    </div>
+
+                    <textarea id="text-input" rows="5" class="w-full bg-gray-900/80 border border-gray-600 rounded-xl p-4 text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none custom-scrollbar font-mono text-sm" 
+                    placeholder="Nhập: 12a1 di muon, nguyen van b 10c2 toc..."></textarea>
+                    
+                    <div id="ocr-loading" class="hidden mt-2">
+                        <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
+                            <div id="ocr-progress" class="bg-yellow-400 h-1.5 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <button id="process-btn" class="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i> Gửi đi
+                    </button>
+                </div>
+
+                <!-- Excel Import -->
+                <div class="bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
+                    <h3 class="text-sm font-bold flex items-center gap-2 mb-2 text-green-400">
+                        <i class="fa-solid fa-file-excel"></i> Nhập Excel
+                    </h3>
+                    <div class="relative dashed-border rounded-xl p-4 text-center hover:bg-gray-700/30 cursor-pointer">
+                        <input type="file" id="excel-input" accept=".xlsx, .xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        <p class="text-xs text-gray-300">Chọn file .xlsx</p>
+                    </div>
+                </div>
+
+                <!-- Export Options -->
+                <div class="bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="export-png-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fa-solid fa-image"></i> Xuất PNG
+                        </button>
+                        <button id="export-excel-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fa-solid fa-file-export"></i> Xuất Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIST SECTION -->
+            <div class="lg:col-span-7">
+                <div class="bg-gray-800/60 backdrop-blur-md rounded-2xl border border-gray-700 shadow-xl flex flex-col h-[calc(100vh-6rem)]">
+                    <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/80 rounded-t-2xl">
+                        <h3 class="font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-blue-400"></i> Danh sách vi phạm
+                            <span id="count-badge" class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
+                        </h3>
+                        <button id="clear-all-btn" class="hidden text-xs bg-red-900/50 text-red-300 px-3 py-1.5 rounded hover:bg-red-900 border border-red-800 transition-colors">
+                            <i class="fa-solid fa-trash"></i> Xóa Hết
+                        </button>
+                    </div>
+
+                    <div id="report-container" class="flex-1 overflow-auto custom-scrollbar p-4">
+                        <div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60">
+                            <i class="fa-solid fa-wifi text-4xl mb-3 animate-pulse"></i>
+                            <p>Đang chờ dữ liệu...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed top-4 right-4 bg-gray-800 border-l-4 border-blue-500 text-white p-4 rounded shadow-2xl transform translate-x-full transition-transform duration-300 z-[100] max-w-sm flex items-start gap-3">
+        <i class="fa-solid fa-circle-info mt-1 text-blue-400"></i>
+        <div>
+            <h4 class="font-bold text-sm" id="toast-title">Thông báo</h4>
+            <p class="text-sm text-gray-300" id="toast-message">Nội dung</p>
+        </div>
+    </div>
+
+    <!-- MAIN SCRIPT -->
+    <script>
+        // --- CONFIG & CONSTANTS ---
+        const CLASS_PASSWORDS = {
+            '12A1': '1231', '12A2': '1232', '12A3': '1233', 
+            '12A4': '1234', '12A5': '1235', '12A6': '1236'
+        };
+        const VIOLATION_MAP = {
+            'KHONG_MANG_THE': { label: 'Không mang thẻ học viên', keys: ['the', 'khong mang the', 'deo the', 'quang the', 'quen the', 'k the', 'ko the'] },
+            'KHONG_MAC_AO_DOAN': { label: 'Không mặc áo đoàn', keys: ['ao doan', 'doan', 'aodoan', 'khong mac ao doan', 'k ao doan', 'thieu ao doan'] },
+            'DI_XE_50CC': { label: 'Đi xe trên 50cc', keys: ['xe', 'may', '50cc', 'phan khoi', 'xe may', 'xe to'] },
+            'NHUOM_TOC': { label: 'Nhuộm tóc / Đầu tóc', keys: ['toc', 'nhuom', 'dau toc', 'toc tai', 'nhuom toc'] },
+            'KHONG_DONG_THUNG': { label: 'Không đóng thùng (Sơ vin)', keys: ['thung', 'so vin', 'bo ao', 'khong dong thung', 'dong thung', 'chua so vin'] },
+            'KHONG_MAC_AO_DAI': { label: 'Không mặc áo dài', keys: ['ao dai', 'aod', 'khong mac ao dai', 'mac sai ao dai'] },
+            'MANG_DEP_LE': { label: 'Mang dép lê', keys: ['dep', 'dep le', 'mang dep', 'di dep', 'le'] },
+            'DI_HOC_MUON': { label: 'Đi học muộn', keys: ['muon', 'tre', 'di muon', 'di tre'] },
+            'KHONG_TRUC_NHAT': { label: 'Không trực nhật', keys: ['truc nhat', 've sinh', 'quet lop'] }
+        };
+
+        // --- GLOBAL STATE ---
+        let peer = null;
+        let conn = null; // Client connection to host
+        let connections = []; // Host connections to clients
+        let myId = '';
+        let hostId = '';
+        let currentUser = { name: '', role: '' };
+        let violationsData = [];
+        let isHost = false;
+
+        // --- UI UTILS ---
+        function showToast(title, message, type = 'info') {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-title').textContent = title;
+            document.getElementById('toast-message').textContent = message;
+            t.className = `fixed top-4 right-4 bg-gray-800 border-l-4 ${type === 'error' ? 'border-red-500' : 'border-blue-500'} text-white p-4 rounded shadow-2xl transform transition-transform duration-300 z-[100] max-w-sm flex items-start gap-3`;
+            t.classList.remove('translate-x-full');
+            setTimeout(() => t.classList.add('translate-x-full'), 3000);
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById('form-create').classList.add('hidden');
+            document.getElementById('form-join').classList.add('hidden');
+            document.getElementById(`form-${tab}`).classList.remove('hidden');
+        }
+
+        function togglePasswordInput() {
+            const role = document.getElementById('join-role').value;
+            const passField = document.getElementById('password-field');
+            const guestNameField = document.getElementById('guest-name-field');
+            if (role.startsWith('12A')) {
+                passField.classList.remove('hidden');
+                guestNameField.classList.add('hidden');
+            } else {
+                passField.classList.add('hidden');
+                guestNameField.classList.remove('hidden');
+            }
+        }
+
+        function updateStatus(status, color = 'green') {
+            const text = document.getElementById('connection-status-text');
+            const dot = document.getElementById('connection-status-dot');
+            text.textContent = status;
+            dot.className = `w-2 h-2 rounded-full ${color === 'green' ? 'bg-green-500' : color === 'red' ? 'bg-red-500' : 'bg-yellow-500'} ${color === 'yellow' ? 'animate-pulse' : ''}`;
+        }
+
+        function switchToMainApp(pin) {
+            document.getElementById('login-screen').classList.add('hidden');
+            const app = document.getElementById('main-app');
+            app.classList.remove('hidden');
+            setTimeout(() => app.classList.remove('opacity-0'), 100);
+            
+            document.getElementById('display-name').textContent = currentUser.name || currentUser.role;
+            document.getElementById('display-role').textContent = currentUser.role;
+            
+            if(pin) {
+                document.getElementById('display-pin').textContent = pin;
+                document.getElementById('pin-container').classList.remove('hidden');
+            }
+            if (currentUser.role === 'HOST') document.getElementById('clear-all-btn').classList.remove('hidden');
+        }
+
+        function copyPin() {
+            const pin = document.getElementById('display-pin').textContent;
+            navigator.clipboard.writeText(pin);
+            showToast('Đã copy', 'Đã sao chép mã phòng');
+        }
+
+        function logout() {
+            if(confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt.')) {
+                if(peer) peer.destroy();
+                location.reload();
+            }
+        }
+
+        // --- P2P LOGIC ---
+        
+        // 1. CREATE ROOM (HOST)
+        function createRoom() {
+            const name = document.getElementById('host-name').value.trim();
+            if (!name) return showToast('Lỗi', 'Nhập tên giám thị', 'error');
+
+            currentUser = { name: name, role: 'HOST' };
+            isHost = true;
+            
+            // Generate a simpler ID for PeerJS
+            // Format: GT-XXXXXX (GT = GiamThi)
+            const randomPin = Math.floor(100000 + Math.random() * 900000);
+            myId = `GT-${randomPin}`;
+
+            initPeer(myId);
+        }
+
+        // 2. JOIN ROOM (CLIENT)
+        function joinRoom() {
+            const pin = document.getElementById('join-pin').value.trim();
+            const role = document.getElementById('join-role').value;
+            
+            if (!pin || pin.length !== 6) return showToast('Lỗi', 'Mã PIN gồm 6 số', 'error');
+            if (!role) return showToast('Lỗi', 'Chọn vai trò', 'error');
+
+            let name = role;
+            if (role.startsWith('12A')) {
+                const pass = document.getElementById('join-password').value;
+                if (pass !== CLASS_PASSWORDS[role]) return showToast('Lỗi', 'Sai mật khẩu lớp!', 'error');
+            } else {
+                name = document.getElementById('guest-name').value.trim();
+                if (!name) return showToast('Lỗi', 'Nhập tên của bạn', 'error');
+            }
+
+            currentUser = { name: name, role: role };
+            isHost = false;
+            hostId = `GT-${pin}`;
+            
+            // Client gets a random ID
+            initPeer();
+        }
+
+        function initPeer(customId = null) {
+            showToast('Hệ thống', 'Đang khởi tạo kết nối...');
+            
+            // Config PeerJS
+            peer = new Peer(customId); 
+
+            peer.on('open', (id) => {
+                console.log('My Peer ID:', id);
+                if (isHost) {
+                    // Host Setup
+                    const pin = id.replace('GT-', '');
+                    switchToMainApp(pin);
+                    updateStatus(`Máy chủ đang chạy (${connections.length} máy)`, 'green');
+                    loadDataLocal(); // Load data saved in Host's browser
+                    renderReport();
+                } else {
+                    // Client Setup: Connect to Host
+                    connectToHost(hostId);
+                    switchToMainApp();
+                }
+            });
+
+            peer.on('connection', (conn) => {
+                // Only Host receives incoming connections usually
+                if (isHost) {
+                    handleIncomingConnection(conn);
+                }
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                if(err.type === 'unavailable-id') {
+                    alert('Mã phòng này đang được sử dụng hoặc chưa đóng hẳn. Hãy thử lại.');
+                    location.reload();
+                } else if(err.type === 'peer-unavailable') {
+                    showToast('Lỗi', 'Không tìm thấy phòng! Hãy kiểm tra mã PIN.', 'error');
+                    updateStatus('Không tìm thấy Host', 'red');
+                } else {
+                    showToast('Lỗi', 'Lỗi kết nối P2P.', 'error');
+                }
+            });
+        }
+
+        // --- HOST LOGIC ---
+        function handleIncomingConnection(c) {
+            connections.push(c);
+            updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+            showToast('Kết nối mới', 'Có máy vừa vào phòng');
+
+            c.on('open', () => {
+                // Send current data to new client immediately
+                c.send({ type: 'SYNC_FULL', data: violationsData });
+            });
+
+            c.on('data', (data) => {
+                handleDataPacket(data);
+            });
+
+            c.on('close', () => {
+                connections = connections.filter(conn => conn !== c);
+                updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+            });
+        }
+
+        function broadcast(packet) {
+            connections.forEach(c => {
+                if(c.open) c.send(packet);
+            });
+        }
+
+        // --- CLIENT LOGIC ---
+        function connectToHost(id) {
+            updateStatus('Đang tìm máy chủ...', 'yellow');
+            conn = peer.connect(id);
+
+            conn.on('open', () => {
+                updateStatus('Đã kết nối với Giám Thị', 'green');
+                showToast('Thành công', 'Đã vào phòng!');
+                // Request initial sync? Host sends it automatically on open.
+            });
+
+            conn.on('data', (data) => {
+                handleDataPacket(data);
+            });
+
+            conn.on('close', () => {
+                updateStatus('Mất kết nối Host', 'red');
+                showToast('Lỗi', 'Host đã thoát hoặc mất mạng.', 'error');
+            });
+            
+            conn.on('error', () => {
+                updateStatus('Lỗi kết nối', 'red');
+            });
+        }
+
+        // --- DATA HANDLING (BOTH) ---
+        function handleDataPacket(packet) {
+            if (packet.type === 'SYNC_FULL') {
+                violationsData = packet.data;
+                renderReport();
+                if(isHost) saveDataLocal();
+            } else if (packet.type === 'ADD_ITEMS') {
+                // Received new items
+                violationsData = [...violationsData, ...packet.items];
+                renderReport();
+                
+                if (isHost) {
+                    saveDataLocal();
+                    // Host must broadcast this update to ALL other clients
+                    // To optimize, just broadcast SYNC_FULL or ADD_ITEMS
+                    broadcast({ type: 'SYNC_FULL', data: violationsData });
+                }
+            } else if (packet.type === 'REMOVE_ITEM') {
+                violationsData = violationsData.filter(v => v.id !== packet.id);
+                renderReport();
+                if(isHost) {
+                    saveDataLocal();
+                    broadcast({ type: 'SYNC_FULL', data: violationsData });
+                }
+            } else if (packet.type === 'CLEAR_ALL') {
+                violationsData = [];
+                renderReport();
+                if(isHost) saveDataLocal();
+            }
+        }
+
+        function sendData(packet) {
+            if (isHost) {
+                // If Host generates data, handle locally then broadcast
+                handleDataPacket(packet);
+            } else {
+                // If Client, send to Host
+                if (conn && conn.open) {
+                    conn.send(packet);
+                } else {
+                    showToast('Lỗi', 'Chưa kết nối Host', 'error');
+                }
+            }
+        }
+
+        // --- STORAGE (HOST ONLY) ---
+        function saveDataLocal() {
+            if(isHost) localStorage.setItem('GiamThiAI_P2P_Data', JSON.stringify(violationsData));
+        }
+        function loadDataLocal() {
+            const saved = localStorage.getItem('GiamThiAI_P2P_Data');
+            if(saved) {
+                try { violationsData = JSON.parse(saved); } catch(e) {}
+            }
+        }
+
+        // --- PROCESSING LOGIC (SAME AS BEFORE) ---
+        const toTitleCase = str => str.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase());
+        const removeAccents = str => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+
+        const detectViolation = (text) => {
+            const normalized = removeAccents(text.toLowerCase()).trim();
+            for (const code in VIOLATION_MAP) {
+                if (VIOLATION_MAP[code].keys.some(key => normalized.includes(key))) return VIOLATION_MAP[code].label;
+            }
+            return toTitleCase(text);
+        };
+
+        const smartParse = (rawText) => {
+            const lines = rawText.split(/\n+/);
+            const results = [];
+            const classRegex = /\b([1-9][0-2]?[a-zA-Z][0-9]{0,2})\b/;
+            const now = new Date().toISOString(); 
+            
+            lines.forEach(line => {
+                line = line.trim().replace(/\s+/g, ' ');
+                if (!line) return;
+                let name = '', className = '', violation = '';
+                const classMatch = line.match(classRegex);
+                
+                if (classMatch) {
+                    className = classMatch[0].toUpperCase();
+                    name = line.substring(0, classMatch.index).replace(/[-–]/g, '').trim();
+                    violation = line.substring(classMatch.index + className.length).replace(/[-–]/g, '').trim();
+                } else {
+                    const parts = line.split(/[-–]/);
+                    if (parts.length >= 2) {
+                        name = parts[0].trim();
+                        violation = parts[parts.length - 1].trim();
+                        if (parts.length > 2) className = parts[1].trim().toUpperCase();
+                    } else {
+                        name = line;
+                        violation = 'Chưa xác định';
+                    }
+                }
+                
+                if (name) {
+                    results.push({
+                        id: Date.now() + Math.random().toString(), 
+                        name: toTitleCase(name),
+                        class: className || '?',
+                        violation: detectViolation(violation),
+                        time: now,
+                        reporter: currentUser.name 
+                    });
+                }
+            });
+            return results;
+        };
+
+        const renderReport = () => {
+            const container = document.getElementById('report-container');
+            document.getElementById('count-badge').textContent = violationsData.length;
+            
+            if (violationsData.length === 0) {
+                container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60"><i class="fa-solid fa-clipboard-check text-6xl mb-4"></i><p>Sạch sẽ, chưa có vi phạm</p></div>`;
+                return;
+            }
+
+            const groupedData = {};
+            violationsData.forEach(s => { 
+                const v = s.violation || 'Lỗi khác'; 
+                if (!groupedData[v]) groupedData[v] = []; 
+                groupedData[v].push(s); 
+            });
+
+            let html = '';
+            let sttTotal = 1;
+            
+            for (const [vName, students] of Object.entries(groupedData)) {
+                html += `
+                <div class="mb-6 animate-fade-in">
+                    <div class="bg-gray-700/50 backdrop-blur-sm p-3 rounded-t-lg border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
+                        <h4 class="font-bold text-blue-400 uppercase text-sm flex items-center gap-2"><i class="fa-solid fa-circle-exclamation"></i>${vName}</h4>
+                        <span class="bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded-full font-mono">${students.length}</span>
+                    </div>
+                    <table class="w-full text-left border-collapse bg-gray-800/40 rounded-b-lg overflow-hidden">
+                        <thead class="bg-gray-800/60 text-xs uppercase text-gray-400">
+                            <tr>
+                                <th class="p-3 w-10 text-center">#</th>
+                                <th class="p-3 w-16 text-center">Giờ</th>
+                                <th class="p-3">Họ và Tên</th>
+                                <th class="p-3 w-20 text-center">Lớp</th>
+                                <th class="p-3 w-20 text-right text-[10px]">Người báo</th>
+                                <th class="p-3 w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700/50">`;
+                
+                students.forEach(s => {
+                    const timeStr = new Date(s.time).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+                    html += `
+                    <tr class="hover:bg-gray-700/30 transition-colors group">
+                        <td class="p-3 text-gray-500 font-mono text-sm text-center">${sttTotal++}</td>
+                        <td class="p-3 text-gray-400 font-mono text-sm text-center">${timeStr}</td>
+                        <td class="p-3 font-medium text-gray-200">${s.name}</td>
+                        <td class="p-3 text-center"><span class="bg-gray-700 text-yellow-400 px-2 py-1 rounded text-xs font-bold font-mono border border-gray-600">${s.class}</span></td>
+                        <td class="p-3 text-right text-gray-500 text-[10px] italic">${s.reporter || ''}</td>
+                        <td class="p-3 text-center">
+                            <button onclick="deleteRow('${s.id}')" class="text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-1">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+            container.innerHTML = html;
+        };
+
+        window.deleteRow = (id) => {
+            sendData({ type: 'REMOVE_ITEM', id: id });
+        };
+        
+        document.getElementById('clear-all-btn').addEventListener('click', () => {
+            if(confirm('Xóa TẤT CẢ dữ liệu trên các máy?')) {
+                sendData({ type: 'CLEAR_ALL' });
+                // If Host, also clear local immediately handled by sendData->handleDataPacket logic if written carefully
+                 if(isHost) {
+                     violationsData = [];
+                     renderReport();
+                     saveDataLocal();
+                     broadcast({ type: 'CLEAR_ALL' });
+                 }
+            }
+        });
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('process-btn').addEventListener('click', () => {
+            const input = document.getElementById('text-input');
+            if (!input.value.trim()) return showToast('Lỗi', 'Nhập dữ liệu!', 'error');
+            
+            const newStudents = smartParse(input.value);
+            if(newStudents.length > 0) {
+                sendData({ type: 'ADD_ITEMS', items: newStudents });
+                input.value = '';
+                showToast('Gửi', `Đã gửi ${newStudents.length} lỗi`);
+            } else {
+                showToast('Thông tin', 'Không nhận dạng được', 'warning');
+            }
+        });
+
+        // OCR & Voice (Same as old logic)
+        document.getElementById('ocr-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            document.getElementById('ocr-loading').classList.remove('hidden');
+            try {
+                const worker = Tesseract.createWorker({ logger: m => { 
+                    if(m.status === 'recognizing text') document.getElementById('ocr-progress').style.width = `${Math.round(m.progress * 100)}%`; 
+                }});
+                await worker.load(); await worker.loadLanguage('eng'); await worker.initialize('eng');
+                const { data: { text } } = await worker.recognize(file);
+                document.getElementById('text-input').value += '\n' + text;
+                await worker.terminate();
+            } catch { showToast('Lỗi', 'OCR thất bại', 'error'); } 
+            finally { document.getElementById('ocr-loading').classList.add('hidden'); e.target.value = ''; }
+        });
+
+        if ('webkitSpeechRecognition' in window) {
+            const recognition = new webkitSpeechRecognition();
+            recognition.continuous = false; recognition.lang = 'vi-VN';
+            document.getElementById('mic-btn').addEventListener('click', () => {
+                recognition.start();
+                document.querySelector('.mic-pulse').classList.add('active');
+            });
+            recognition.onresult = event => document.getElementById('text-input').value += event.results[0][0].transcript + '\n';
+            recognition.onend = () => document.querySelector('.mic-pulse').classList.remove('active');
+        } else { document.getElementById('mic-btn').style.display = 'none'; }
+
+        // Export (Simplified)
+        document.getElementById('export-excel-btn').addEventListener('click', () => {
+            if(violationsData.length === 0) return;
+            const wb = XLSX.utils.book_new();
+            const wsData = [['STT', 'Thời gian', 'Họ Tên', 'Lớp', 'Lỗi', 'Người báo']];
+            violationsData.forEach((s, i) => wsData.push([i+1, new Date(s.time).toLocaleString(), s.name, s.class, s.violation, s.reporter]));
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            XLSX.utils.book_append_sheet(wb, ws, "ViPham");
+            XLSX.writeFile(wb, `DS_Loi_${hostId || 'Offline'}.xlsx`);
+        });
+
+        // Clock
+        setInterval(() => document.getElementById('realtime-clock').textContent = new Date().toLocaleTimeString('vi-VN', { hour12: false }), 1000);
+
+    </script>
+</body>
+</html>
