@@ -40,6 +40,11 @@
         
         .tab-btn.active { background-color: #2563eb; color: white; border-color: #2563eb; }
         .tab-btn { background-color: transparent; color: #9ca3af; border: 1px solid #4b5563; }
+
+        /* Animation cho Popover danh sách user */
+        #user-list-popover { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+        #user-list-popover.hidden { opacity: 0; transform: scale(0.95) translateY(10px); pointer-events: none; display: block; visibility: hidden;}
+        #user-list-popover:not(.hidden) { opacity: 1; transform: scale(1) translateY(0); visibility: visible;}
     </style>
 </head>
 <body class="school-bg text-gray-100 min-h-screen font-sans overflow-x-hidden">
@@ -106,8 +111,8 @@
                 </div>
 
                 <div id="guest-name-field" class="hidden">
-                     <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên của bạn</label>
-                    <input type="text" id="guest-name" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none" placeholder="Nhập tên...">
+                     <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên người trực (Bạn là ai?)</label>
+                    <input type="text" id="guest-name" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none" placeholder="VD: Nguyễn Văn A...">
                 </div>
 
                 <button onclick="joinRoom()" id="btn-join-room" class="w-full py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
@@ -122,7 +127,7 @@
     </div>
 
     <!-- MAIN APP -->
-    <main id="main-app" class="container mx-auto p-4 lg:p-6 max-w-7xl hidden opacity-0 transition-opacity duration-500">
+    <main id="main-app" class="container mx-auto p-4 lg:p-6 max-w-7xl hidden opacity-0 transition-opacity duration-500 relative">
         <!-- Header Info -->
         <header class="flex flex-col md:flex-row justify-between items-center mb-6 bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
             <div class="flex items-center gap-4 w-full md:w-auto">
@@ -234,6 +239,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- HOST ONLY: CONNECTED USERS BUBBLE -->
+        <div id="connected-users-bubble" class="fixed bottom-6 right-6 z-50 hidden">
+             <button onclick="toggleUserList()" class="bg-blue-600 hover:bg-blue-500 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center relative transition-transform hover:scale-110 border-2 border-blue-400">
+                <i class="fa-solid fa-users text-xl"></i>
+                <span id="user-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full border-2 border-gray-900 font-bold">0</span>
+            </button>
+            
+            <!-- User List Popover -->
+            <div id="user-list-popover" class="absolute bottom-16 right-0 w-72 bg-gray-800/95 backdrop-blur-xl border border-gray-600 rounded-xl shadow-2xl p-0 hidden transform origin-bottom-right overflow-hidden">
+                <div class="p-3 border-b border-gray-700 bg-gray-900/50">
+                    <h4 class="text-xs font-bold text-gray-300 uppercase flex items-center gap-2">
+                        <i class="fa-solid fa-network-wired text-green-500"></i> Máy đang kết nối
+                    </h4>
+                </div>
+                <ul id="user-list-ul" class="max-h-60 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    <!-- Javascript will populate this -->
+                    <li class="text-gray-500 text-xs text-center p-2 italic">Chưa có ai kết nối...</li>
+                </ul>
+            </div>
+        </div>
     </main>
 
     <!-- TOAST NOTIFICATION -->
@@ -267,7 +293,7 @@
         // --- GLOBAL STATE ---
         let peer = null;
         let conn = null; // Client connection to host
-        let connections = []; // Host connections to clients
+        let connections = []; // Host connections to clients (store objects with metadata)
         let myId = '';
         let hostId = '';
         let currentUser = { name: '', role: '' };
@@ -296,12 +322,14 @@
             const role = document.getElementById('join-role').value;
             const passField = document.getElementById('password-field');
             const guestNameField = document.getElementById('guest-name-field');
+            
+            // Luôn hiện ô nhập tên người trực
+            guestNameField.classList.remove('hidden');
+
             if (role.startsWith('12A')) {
                 passField.classList.remove('hidden');
-                guestNameField.classList.add('hidden');
             } else {
                 passField.classList.add('hidden');
-                guestNameField.classList.remove('hidden');
             }
         }
 
@@ -325,7 +353,10 @@
                 document.getElementById('display-pin').textContent = pin;
                 document.getElementById('pin-container').classList.remove('hidden');
             }
-            if (currentUser.role === 'HOST') document.getElementById('clear-all-btn').classList.remove('hidden');
+            if (currentUser.role === 'HOST') {
+                document.getElementById('clear-all-btn').classList.remove('hidden');
+                document.getElementById('connected-users-bubble').classList.remove('hidden'); // Show bubble for Host
+            }
         }
 
         function copyPin() {
@@ -339,6 +370,49 @@
                 if(peer) peer.destroy();
                 location.reload();
             }
+        }
+
+        // --- HOST UI LOGIC (BUBBLE) ---
+        function toggleUserList() {
+            const popover = document.getElementById('user-list-popover');
+            popover.classList.toggle('hidden');
+        }
+
+        function updateUserListUI() {
+            const badge = document.getElementById('user-count-badge');
+            const listUl = document.getElementById('user-list-ul');
+            
+            badge.textContent = connections.length;
+            
+            if (connections.length === 0) {
+                listUl.innerHTML = '<li class="text-gray-500 text-xs text-center p-2 italic">Chưa có ai kết nối...</li>';
+                return;
+            }
+
+            let html = '';
+            connections.forEach(conn => {
+                const meta = conn.metadata || { name: 'Không tên', role: '?' };
+                // Icon based on role
+                let icon = 'fa-user';
+                let colorClass = 'text-gray-400';
+                if (meta.role.startsWith('12A')) { icon = 'fa-users'; colorClass = 'text-blue-400'; }
+                else if (meta.role === 'MONITOR') { icon = 'fa-user-shield'; colorClass = 'text-green-400'; }
+
+                html += `
+                <li class="flex items-center justify-between p-2 bg-gray-800 rounded border border-gray-700 hover:bg-gray-700 transition-colors">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <div class="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center shrink-0 border border-gray-600">
+                            <i class="fa-solid ${icon} ${colorClass} text-xs"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-gray-200 truncate">${meta.name}</p>
+                            <p class="text-[10px] text-gray-400 font-mono">${meta.role}</p>
+                        </div>
+                    </div>
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" title="Online"></span>
+                </li>`;
+            });
+            listUl.innerHTML = html;
         }
 
         // --- P2P LOGIC ---
@@ -363,20 +437,22 @@
         function joinRoom() {
             const pin = document.getElementById('join-pin').value.trim();
             const role = document.getElementById('join-role').value;
+            const inputName = document.getElementById('guest-name').value.trim();
             
             if (!pin || pin.length !== 6) return showToast('Lỗi', 'Mã PIN gồm 6 số', 'error');
             if (!role) return showToast('Lỗi', 'Chọn vai trò', 'error');
+            if (!inputName) return showToast('Lỗi', 'Vui lòng nhập tên người trực', 'error');
 
-            let name = role;
+            let finalName = inputName;
+            
+            // Password check for classes
             if (role.startsWith('12A')) {
                 const pass = document.getElementById('join-password').value;
                 if (pass !== CLASS_PASSWORDS[role]) return showToast('Lỗi', 'Sai mật khẩu lớp!', 'error');
-            } else {
-                name = document.getElementById('guest-name').value.trim();
-                if (!name) return showToast('Lỗi', 'Nhập tên của bạn', 'error');
+                // Format name for class: "Lớp Trưởng (12A1)" or just name
             }
 
-            currentUser = { name: name, role: role };
+            currentUser = { name: finalName, role: role };
             isHost = false;
             hostId = `GT-${pin}`;
             
@@ -396,9 +472,10 @@
                     // Host Setup
                     const pin = id.replace('GT-', '');
                     switchToMainApp(pin);
-                    updateStatus(`Máy chủ đang chạy (${connections.length} máy)`, 'green');
+                    updateStatus(`Máy chủ đang chạy`, 'green');
                     loadDataLocal(); // Load data saved in Host's browser
                     renderReport();
+                    updateUserListUI();
                 } else {
                     // Client Setup: Connect to Host
                     connectToHost(hostId);
@@ -429,12 +506,22 @@
 
         // --- HOST LOGIC ---
         function handleIncomingConnection(c) {
-            connections.push(c);
-            updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
-            showToast('Kết nối mới', 'Có máy vừa vào phòng');
-
+            // Khi có kết nối mới, đợi nó mở để lấy metadata
             c.on('open', () => {
-                // Send current data to new client immediately
+                // Thêm vào danh sách connections
+                connections.push(c);
+                
+                // Lấy thông tin từ metadata (nếu có)
+                const clientName = c.metadata?.name || 'Ẩn danh';
+                const clientRole = c.metadata?.role || 'Unknown';
+                
+                showToast('Kết nối mới', `${clientName} (${clientRole}) đã vào phòng`);
+                updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+                
+                // Update danh sách user UI
+                updateUserListUI();
+
+                // Gửi dữ liệu hiện tại cho máy mới
                 c.send({ type: 'SYNC_FULL', data: violationsData });
             });
 
@@ -443,8 +530,16 @@
             });
 
             c.on('close', () => {
+                // Xóa khỏi danh sách
                 connections = connections.filter(conn => conn !== c);
                 updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+                updateUserListUI();
+            });
+            
+            // Xử lý khi mất kết nối đột ngột
+            c.on('error', () => {
+                 connections = connections.filter(conn => conn !== c);
+                 updateUserListUI();
             });
         }
 
@@ -457,12 +552,18 @@
         // --- CLIENT LOGIC ---
         function connectToHost(id) {
             updateStatus('Đang tìm máy chủ...', 'yellow');
-            conn = peer.connect(id);
+            
+            // Gửi kèm thông tin (metadata) khi kết nối
+            conn = peer.connect(id, {
+                metadata: {
+                    name: currentUser.name,
+                    role: currentUser.role
+                }
+            });
 
             conn.on('open', () => {
                 updateStatus('Đã kết nối với Giám Thị', 'green');
                 showToast('Thành công', 'Đã vào phòng!');
-                // Request initial sync? Host sends it automatically on open.
             });
 
             conn.on('data', (data) => {
@@ -492,8 +593,6 @@
                 
                 if (isHost) {
                     saveDataLocal();
-                    // Host must broadcast this update to ALL other clients
-                    // To optimize, just broadcast SYNC_FULL or ADD_ITEMS
                     broadcast({ type: 'SYNC_FULL', data: violationsData });
                 }
             } else if (packet.type === 'REMOVE_ITEM') {
