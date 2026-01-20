@@ -15,10 +15,9 @@ const VIOLATION_MAP = {
     'KHONG_TRUC_NHAT': { label: 'Không trực nhật', keys: ['truc nhat', 've sinh', 'quet lop'] }
 };
 
-// --- STORAGE KEYS ---
-const CLIENT_SESSION_KEY = 'GiamThiAI_Client_Session'; // Lưu phiên khách
-const HOST_SESSION_KEY = 'GiamThiAI_Host_Session';     // Lưu phiên chủ
-const HOST_DATA_KEY = 'GiamThiAI_P2P_Data';            // Lưu dữ liệu lỗi
+const CLIENT_SESSION_KEY = 'GiamThiAI_Client_Session'; // Key lưu phiên khách
+const HOST_SESSION_KEY = 'GiamThiAI_Host_Session';     // Key lưu phiên chủ
+const HOST_DATA_KEY = 'GiamThiAI_P2P_Data';            // Key lưu dữ liệu lỗi
 
 // --- GLOBAL STATE ---
 let peer = null;
@@ -254,31 +253,27 @@ function initPeer(customId = null) {
     peer.on('error', (err) => {
         console.error(err);
         if(err.type === 'unavailable-id') {
-            // Nếu là Host đang khôi phục phiên mà ID bị trùng (do chưa thoát hẳn)
+            // Nếu là Host đang khôi phục phiên mà ID bị trùng
             if (isHost && localStorage.getItem(HOST_SESSION_KEY)) {
-                showToast('Thông báo', 'Mã phòng cũ đang kẹt, tạo mã mới nhưng giữ nguyên dữ liệu!', 'warning');
-                // Tạo ID mới nhưng vẫn giữ isHost = true và load lại data cũ
+                showToast('Thông báo', 'Tạo mã phòng mới...', 'warning');
                 const newPin = Math.floor(100000 + Math.random() * 900000);
                 myId = `GT-${newPin}`;
                 hostId = myId;
                 
-                // Cập nhật lại session storage với PIN mới
                 const currentSession = JSON.parse(localStorage.getItem(HOST_SESSION_KEY));
                 currentSession.pin = newPin;
                 localStorage.setItem(HOST_SESSION_KEY, JSON.stringify(currentSession));
                 
-                initPeer(myId); // Thử lại với ID mới
+                initPeer(myId); 
                 return;
             }
             
-            alert('Mã phòng này đang được sử dụng hoặc chưa đóng hẳn. Hãy thử lại.');
-            localStorage.removeItem(CLIENT_SESSION_KEY); // Xóa phiên lỗi
+            alert('Mã phòng này đang được sử dụng. Hãy thử lại.');
+            localStorage.removeItem(CLIENT_SESSION_KEY); 
             location.reload();
         } else if(err.type === 'peer-unavailable') {
             showToast('Lỗi', 'Không tìm thấy phòng! Hãy kiểm tra mã PIN.', 'error');
             updateStatus('Không tìm thấy Host', 'red');
-            // Nếu là Client đang reconnect mà không thấy host -> Xóa session để login lại
-            // localStorage.removeItem(CLIENT_SESSION_KEY); 
         } else {
             showToast('Lỗi', 'Lỗi kết nối P2P.', 'error');
         }
@@ -584,6 +579,54 @@ document.getElementById('text-input').addEventListener('keydown', (e) => {
     }
 });
 
+// --- EXCEL IMPORT LOGIC (NEW) ---
+document.getElementById('excel-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        // Đọc dữ liệu dạng mảng (header: 1)
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Giả sử định dạng chuẩn: [STT, Time, Name, Class, Violation, Reporter]
+        const newItems = [];
+        const now = new Date().toISOString();
+
+        // Bắt đầu duyệt từ dòng 1 (bỏ qua header dòng 0)
+        for (let i = 1; i < json.length; i++) {
+            const row = json[i];
+            // Cần ít nhất tên (cột 2) và lỗi (cột 4)
+            if (row[2] && row[4]) { 
+                newItems.push({
+                    id: Date.now() + Math.random().toString(),
+                    time: now, // Dùng thời gian hiện tại khi import
+                    name: row[2].toString().trim(),
+                    class: row[3] ? row[3].toString().trim().toUpperCase() : '?',
+                    violation: detectViolation(row[4].toString().trim()),
+                    reporter: row[5] ? row[5].toString().trim() : currentUser.name
+                });
+            }
+        }
+
+        if (newItems.length > 0) {
+            sendData({ type: 'ADD_ITEMS', items: newItems });
+            showToast('Thành công', `Đã nhập ${newItems.length} dòng từ Excel`);
+        } else {
+            showToast('Lỗi', 'Không tìm thấy dữ liệu hợp lệ trong file', 'error');
+        }
+        
+        // Reset input để có thể chọn lại file cũ nếu muốn
+        document.getElementById('excel-input').value = '';
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+// OCR Logic
 document.getElementById('ocr-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
