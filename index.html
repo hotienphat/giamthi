@@ -169,7 +169,7 @@
                             <i class="fa-solid fa-keyboard text-blue-400"></i> Nhập liệu
                         </h3>
                         
-                        <!-- TOGGLE ENTER TO SEND (Mới thêm) -->
+                        <!-- TOGGLE ENTER TO SEND -->
                         <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none bg-gray-900/50 px-3 py-1 rounded-full border border-gray-600 hover:border-blue-500 transition-colors" title="Bật để ấn Enter là gửi luôn (PC). Tắt để ấn Enter xuống dòng (Mobile)">
                             <input type="checkbox" id="enter-to-send" class="w-3.5 h-3.5 accent-blue-500 rounded cursor-pointer">
                             Enter gửi
@@ -481,6 +481,7 @@
             // Format: GT-XXXXXX (GT = GiamThi)
             const randomPin = Math.floor(100000 + Math.random() * 900000);
             myId = `GT-${randomPin}`;
+            hostId = myId; // BUG FIX: Set hostId for host so export works
 
             initPeer(myId);
         }
