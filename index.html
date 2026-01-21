@@ -273,6 +273,47 @@
         </div>
     </main>
 
+    <!-- EDIT MODAL (POPUP SỬA BÁO CÁO) -->
+    <div id="edit-modal" class="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/90 backdrop-blur-sm hidden">
+        <div class="bg-gray-800 rounded-2xl border border-gray-700 shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
+            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square text-yellow-500"></i> Sửa báo cáo
+            </h3>
+            
+            <input type="hidden" id="edit-id">
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Họ và Tên</label>
+                    <input type="text" id="edit-name" class="w-full p-2.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Lớp</label>
+                        <input type="text" id="edit-class" class="w-full p-2.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none uppercase font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Lỗi Vi Phạm</label>
+                        <input type="text" id="edit-violation" list="violation-suggestions" class="w-full p-2.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none">
+                        <datalist id="violation-suggestions">
+                            <!-- JS will populate -->
+                        </datalist>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <button onclick="closeEditModal()" class="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium rounded-xl transition-colors">
+                    Hủy bỏ
+                </button>
+                <button onclick="saveEdit()" class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-save"></i> Lưu lại
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="fixed top-4 right-4 bg-gray-800 border-l-4 border-blue-500 text-white p-4 rounded shadow-2xl transform translate-x-full transition-transform duration-300 z-[100] max-w-sm flex items-start gap-3">
         <i class="fa-solid fa-circle-info mt-1 text-blue-400"></i>
