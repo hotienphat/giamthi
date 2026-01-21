@@ -224,7 +224,23 @@ function initPeer(customId = null) {
     showToast('Hệ thống', 'Đang khởi tạo kết nối...');
     
     // Config PeerJS
-    peer = new Peer(customId); 
+    // Cấu hình máy chủ hỗ trợ kết nối xuyên mạng
+const peerConfig = {
+    config: {
+        iceServers: [
+            // Máy chủ STUN của Google (Miễn phí, giúp tìm IP public)
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+        ]
+    }
+    // debug: 3 // Bật dòng này nếu muốn xem log lỗi chi tiết
+};
+
+// Khởi tạo Peer với config mới
+peer = new Peer(customId, peerConfig); 
 
     peer.on('open', (id) => {
         console.log('My Peer ID:', id);
