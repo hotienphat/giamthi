@@ -94,6 +94,17 @@ function switchToMainApp(pin) {
         document.getElementById('clear-all-btn').classList.remove('hidden');
         document.getElementById('connected-users-bubble').classList.remove('hidden'); // Show bubble for Host
     }
+
+    // Populate datalist for edit modal
+    const dataList = document.getElementById('violation-suggestions');
+    if(dataList) {
+        dataList.innerHTML = '';
+        Object.values(VIOLATION_MAP).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.label;
+            dataList.appendChild(opt);
+        });
+    }
     
     // Tự động kiểm tra thiết bị để set toggle Enter
     const isMobile = window.innerWidth <= 768;
@@ -236,7 +247,6 @@ const peerConfig = {
             { urls: 'stun:stun4.l.google.com:19302' },
         ]
     }
-    // debug: 3 // Bật dòng này nếu muốn xem log lỗi chi tiết
 };
 
 // Khởi tạo Peer với config mới
@@ -382,6 +392,16 @@ function handleDataPacket(packet) {
             saveDataLocal();
             broadcast({ type: 'SYNC_FULL', data: violationsData });
         }
+    } else if (packet.type === 'UPDATE_ITEM') {
+        const index = violationsData.findIndex(v => v.id === packet.data.id);
+        if (index !== -1) {
+            violationsData[index] = { ...violationsData[index], ...packet.data };
+            renderReport();
+            if (isHost) {
+                saveDataLocal();
+                broadcast({ type: 'SYNC_FULL', data: violationsData });
+            }
+        }
     } else if (packet.type === 'CLEAR_ALL') {
         violationsData = [];
         renderReport();
@@ -500,7 +520,7 @@ const renderReport = () => {
                         ${displaySettings.name ? '<th class="p-3">Họ và Tên</th>' : ''}
                         ${displaySettings.class ? '<th class="p-3 w-20 text-center">Lớp</th>' : ''}
                         ${displaySettings.reporter ? '<th class="p-3 w-20 text-right text-[10px]">Người báo</th>' : ''}
-                        <th class="p-3 w-8"></th>
+                        <th class="p-3 w-20 text-center">Tác vụ</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-700/50">`;
@@ -515,9 +535,14 @@ const renderReport = () => {
                 ${displaySettings.class ? `<td class="p-3 text-center"><span class="bg-gray-700 text-yellow-400 px-2 py-1 rounded text-xs font-bold font-mono border border-gray-600">${s.class}</span></td>` : ''}
                 ${displaySettings.reporter ? `<td class="p-3 text-right text-gray-500 text-[10px] italic">${s.reporter || ''}</td>` : ''}
                 <td class="p-3 text-center">
-                    <button onclick="deleteRow('${s.id}')" class="text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-1">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
+                    <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button onclick="openEditModal('${s.id}')" class="text-gray-400 hover:text-yellow-400 transition-colors p-1" title="Sửa">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button onclick="deleteRow('${s.id}')" class="text-gray-400 hover:text-red-400 transition-colors p-1" title="Xóa">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>`;
         });
@@ -526,8 +551,47 @@ const renderReport = () => {
     container.innerHTML = html;
 };
 
+// --- EDIT LOGIC ---
+window.openEditModal = (id) => {
+    const item = violationsData.find(v => v.id === id);
+    if (!item) return;
+
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-name').value = item.name;
+    document.getElementById('edit-class').value = item.class;
+    document.getElementById('edit-violation').value = item.violation;
+    
+    document.getElementById('edit-modal').classList.remove('hidden');
+};
+
+window.closeEditModal = () => {
+    document.getElementById('edit-modal').classList.add('hidden');
+};
+
+window.saveEdit = () => {
+    const id = document.getElementById('edit-id').value;
+    const name = document.getElementById('edit-name').value.trim();
+    const className = document.getElementById('edit-class').value.trim().toUpperCase();
+    const violation = document.getElementById('edit-violation').value.trim();
+
+    if (!name || !className || !violation) {
+        showToast('Lỗi', 'Vui lòng điền đầy đủ thông tin', 'error');
+        return;
+    }
+
+    sendData({ 
+        type: 'UPDATE_ITEM', 
+        data: { id, name, class: className, violation } 
+    });
+    
+    closeEditModal();
+    showToast('Thành công', 'Đã cập nhật báo cáo');
+};
+
 window.deleteRow = (id) => {
-    sendData({ type: 'REMOVE_ITEM', id: id });
+    if(confirm('Bạn có chắc muốn xóa lỗi này?')) {
+        sendData({ type: 'REMOVE_ITEM', id: id });
+    }
 };
 
 document.getElementById('clear-all-btn').addEventListener('click', () => {
