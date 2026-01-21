@@ -179,7 +179,7 @@ function updateUserListUI() {
 // 1. CREATE ROOM (HOST)
 function createRoom() {
     const name = document.getElementById('host-name').value.trim();
-    if (!name) return showToast('Lỗi', 'Nhập tên giám thị', 'error');
+    if (!name) return showToast('Lỗi', 'Vui lòng chọn tên giám thị (Lớp trưởng)', 'error');
 
     currentUser = { name: name, role: 'HOST' };
     isHost = true;
