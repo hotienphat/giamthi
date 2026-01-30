@@ -767,15 +767,13 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
                     
                     <td style="padding: 10px; text-align: center; vertical-align: middle;">
                         <span style="
-                            display: inline-block;   /* Quan trọng: dùng block/inline-block */
-                            line-height: 28px;       /* Căn giữa: Line-height == Height */
-                            height: 28px;            
-                            vertical-align: middle;
+                            display: inline-block;  
+                            line-height: 18px;         /* Line-height nhỏ để gom dòng */
+                            padding: 4px 10px 6px 10px; /* Padding TRÊN 4px, DƯỚI 6px -> Đẩy chữ lên */
                             
                             text-align: center;
                             background-color: #e2e8f0; 
                             color: #475569; 
-                            padding: 0 10px;         /* Chỉ padding ngang */
                             border-radius: 99px; 
                             font-weight: 700; 
                             font-size: 12px; 
