@@ -768,6 +768,9 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
                     <td style="padding: 10px; text-align: center; vertical-align: middle;">
                         <span style="
                             display: inline-block; 
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto;
                             background-color: #e2e8f0; 
                             color: #475569; 
                             padding: 6px 10px; 
@@ -775,7 +778,9 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
                             font-weight: 700; 
                             font-size: 12px; 
                             line-height: 1.5; 
-                            min-width: 60px; 
+                            min-width: 60px;
+                            height: 28px; 
+                            box-sizing: border-box;">
                             text-align: center;">
                             ${s.class}
                         </span>
