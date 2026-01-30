@@ -764,22 +764,20 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
                     <td style="padding: 10px; color: #64748b; font-weight: 600; text-align: center; width: 50px;">${sttTotal++}</td>
                     <td style="padding: 10px; color: #64748b; font-family: monospace; font-size: 13px; text-align: center; width: 80px;">${formatTime(s.time)}</td>
                     <td style="padding: 10px;"><span style="font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 14px;">${s.name}</span></td>
-                    <!-- UPDATED: FIX "LỆCH" BADGE - Căn giữa hoàn hảo -->
                     <td style="padding: 10px; text-align: center; vertical-align: middle;">
                         <span style="
-                            display: inline-block; 
-                            align-items: center;
-                            justify-content: center;
+                            display: inline-flex;  /* CHUYỂN TỪ inline-block SANG inline-flex */
+                            align-items: center;   /* Căn giữa theo chiều dọc */
+                            justify-content: center; /* Căn giữa theo chiều ngang */
                             margin: 0 auto;
                             background-color: #e2e8f0; 
                             color: #475569; 
-                            padding: 6px 10px; 
+                            padding: 0 10px;       /* Bỏ padding top/bottom vì đã có height và flex */
                             border-radius: 99px; 
                             font-weight: 700; 
                             font-size: 12px; 
-                            line-height: 1.5; 
                             min-width: 60px;
-                            height: 28px; 
+                            height: 28px;          /* Chiều cao cố định */
                             box-sizing: border-box;">
                             ${s.class}
                         </span>
