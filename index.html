@@ -4,8 +4,9 @@
     <link rel="icon" href="https://files.catbox.moe/jyg7qk.webp">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trợ Lý Giám Thị AI - P2P Sync</title>
-    <!-- Thư viện giao diện và xử lý -->
+    <title>Trợ Lý Giám Thị AI - P2P Sync (Updated)</title>
+    
+    <!-- Thư viện giao diện và xử lý (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -16,7 +17,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Liên kết đến file CSS riêng -->
+    <!-- Kết nối file CSS riêng -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="school-bg text-gray-100 min-h-screen font-sans overflow-x-hidden">
@@ -29,7 +30,7 @@
                     <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo" class="w-full h-full object-contain drop-shadow-xl">
                 </div>
                 <h1 class="text-2xl font-bold text-white uppercase tracking-wider">Hệ Thống Trực Nề Nếp</h1>
-                <p class="text-gray-400 text-xs mt-1">Do học viên trung tâm tạo nên </p>
+                <p class="text-gray-400 text-xs mt-1">Version 2.0 - Optimized</p>
             </div>
 
             <!-- Tabs -->
@@ -50,7 +51,6 @@
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên Giám Thị (Host)</label>
-                    <!-- THAY ĐỔI Ở ĐÂY: Chuyển từ input text sang select option -->
                     <select id="host-name" class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none cursor-pointer hover:bg-gray-800/50 transition-colors">
                         <option value="">-- Chọn danh tính --</option>
                         <option value="12A1 - Hồ Tiến Phát">12A1 - Hồ Tiến Phát</option>
@@ -59,6 +59,8 @@
                         <option value="12A4 - Lớp Trưởng">12A4 - Lớp Trưởng</option>
                         <option value="12A5 - Lớp Trưởng">12A5 - Lớp Trưởng</option>
                         <option value="12A6 - Lớp Trưởng">12A6 - Lớp Trưởng</option>
+                        <!-- NEW OPTION ADDED -->
+                        <option value="11B1 - Vũ Thị Vân Anh">11B1 - Vũ Thị Vân Anh</option>
                         <option value="Tổ Giám Thị - Phan Thị Thuý">Tổ Giám Thị (Phan Thị Thuý)</option>
                     </select>
                 </div>
@@ -84,6 +86,8 @@
                         <option value="12A4">Lớp 12A4</option>
                         <option value="12A5">Lớp 12A5</option>
                         <option value="12A6">Lớp 12A6</option>
+                        <!-- NEW OPTION ADDED -->
+                        <option value="11B1">Lớp 11B1</option>
                     </select>
                 </div>
                 
@@ -103,7 +107,7 @@
             </div>
             
              <div class="mt-4 p-3 bg-gray-700/30 rounded-lg border border-gray-700 text-xs text-gray-400">
-                <p><strong>Mật khẩu do Tổ Giám Thị cung cấp:</strong> Liên Hệ Hồ Tiến Phát 12A1</p>
+                <p><strong>Liên hệ lấy mật khẩu:</strong> Tổ Giám Thị hoặc 12A1</p>
             </div>
         </div>
     </div>
@@ -333,7 +337,7 @@
         </div>
     </div>
 
-    <!-- Liên kết đến file Script JS -->
+    <!-- Kết nối file JS riêng -->
     <script src="script.js"></script>
 </body>
 </html>
