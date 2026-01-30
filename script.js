@@ -781,7 +781,6 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
                             min-width: 60px;
                             height: 28px; 
                             box-sizing: border-box;">
-                            text-align: center;">
                             ${s.class}
                         </span>
                     </td>
