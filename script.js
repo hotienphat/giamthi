@@ -1,7 +1,8 @@
 // --- CONFIG & CONSTANTS ---
 const CLASS_PASSWORDS = {
     '12A1': '1231', '12A2': '1232', '12A3': '1233', 
-    '12A4': '1234', '12A5': '1235', '12A6': '1236'
+    '12A4': '1234', '12A5': '1235', '12A6': '1236',
+    '11B1': '1131' // UPDATED: Mật khẩu mặc định cho 11B1
 };
 const VIOLATION_MAP = {
     'KHONG_MANG_THE': { label: 'Không mang thẻ học viên', keys: ['the', 'khong mang the', 'deo the', 'quang the', 'quen the', 'k the', 'ko the'] },
@@ -63,7 +64,8 @@ function togglePasswordInput() {
     // Luôn hiện ô nhập tên người trực
     guestNameField.classList.remove('hidden');
 
-    if (role.startsWith('12A')) {
+    // BUG FIX: Kiểm tra xem role có trong danh sách mật khẩu không, thay vì chỉ check 12A
+    if (CLASS_PASSWORDS.hasOwnProperty(role)) {
         passField.classList.remove('hidden');
     } else {
         passField.classList.add('hidden');
@@ -154,7 +156,9 @@ function updateUserListUI() {
         // Icon based on role
         let icon = 'fa-user';
         let colorClass = 'text-gray-400';
-        if (meta.role.startsWith('12A')) { icon = 'fa-users'; colorClass = 'text-blue-400'; }
+        
+        // BUG FIX: Mở rộng kiểm tra icon cho cả khối 11 và 12
+        if (meta.role.startsWith('12') || meta.role.startsWith('11')) { icon = 'fa-users'; colorClass = 'text-blue-400'; }
         else if (meta.role === 'MONITOR') { icon = 'fa-user-shield'; colorClass = 'text-green-400'; }
 
         html += `
@@ -212,7 +216,8 @@ function joinRoom() {
     let finalName = inputName;
     
     // Password check for classes
-    if (role.startsWith('12A')) {
+    // BUG FIX: Check if role exists in keys instead of string check
+    if (CLASS_PASSWORDS.hasOwnProperty(role)) {
         const pass = document.getElementById('join-password').value;
         if (pass !== CLASS_PASSWORDS[role]) return showToast('Lỗi', 'Sai mật khẩu lớp!', 'error');
     }
@@ -234,23 +239,19 @@ function joinRoom() {
 function initPeer(customId = null) {
     showToast('Hệ thống', 'Đang khởi tạo kết nối...');
     
-    // Config PeerJS
-    // Cấu hình máy chủ hỗ trợ kết nối xuyên mạng
-const peerConfig = {
-    config: {
-        iceServers: [
-            // Máy chủ STUN của Google (Miễn phí, giúp tìm IP public)
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-        ]
-    }
-};
+    const peerConfig = {
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+            ]
+        }
+    };
 
-// Khởi tạo Peer với config mới
-peer = new Peer(customId, peerConfig); 
+    peer = new Peer(customId, peerConfig); 
 
     peer.on('open', (id) => {
         console.log('My Peer ID:', id);
@@ -259,7 +260,7 @@ peer = new Peer(customId, peerConfig);
             const pin = id.replace('GT-', '');
             switchToMainApp(pin);
             updateStatus(`Máy chủ đang chạy`, 'green');
-            loadDataLocal(); // Load data saved in Host's browser
+            loadDataLocal(); 
             renderReport();
             updateUserListUI();
         } else {
@@ -270,7 +271,6 @@ peer = new Peer(customId, peerConfig);
     });
 
     peer.on('connection', (conn) => {
-        // Only Host receives incoming connections usually
         if (isHost) {
             handleIncomingConnection(conn);
         }
@@ -279,7 +279,6 @@ peer = new Peer(customId, peerConfig);
     peer.on('error', (err) => {
         console.error(err);
         if(err.type === 'unavailable-id') {
-            // Nếu là Host đang khôi phục phiên mà ID bị trùng
             if (isHost && localStorage.getItem(HOST_SESSION_KEY)) {
                 showToast('Thông báo', 'Tạo mã phòng mới...', 'warning');
                 const newPin = Math.floor(100000 + Math.random() * 900000);
@@ -447,6 +446,7 @@ const detectViolation = (text) => {
 const smartParse = (rawText) => {
     const lines = rawText.split(/\n+/);
     const results = [];
+    // BUG FIX: Regex is fine, but ensuring it captures newer classes if format changes
     const classRegex = /\b([1-9][0-2]?[a-zA-Z][0-9]{0,2})\b/;
     const now = new Date().toISOString(); 
     
@@ -536,7 +536,7 @@ const renderReport = () => {
                 ${displaySettings.reporter ? `<td class="p-3 text-right text-gray-500 text-[10px] italic">${s.reporter || ''}</td>` : ''}
                 <td class="p-3 text-center">
                     <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onclick="openEditModal('${s.id}')" class="text-gray-400 hover:text-yellow-400 transition-colors p-1" title="Sửa">
+                            <button onclick="openEditModal('${s.id}')" class="text-gray-400 hover:text-yellow-400 transition-colors p-1" title="Sửa">
                             <i class="fa-solid fa-pen"></i>
                         </button>
                         <button onclick="deleteRow('${s.id}')" class="text-gray-400 hover:text-red-400 transition-colors p-1" title="Xóa">
@@ -764,7 +764,22 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
                     <td style="padding: 10px; color: #64748b; font-weight: 600; text-align: center; width: 50px;">${sttTotal++}</td>
                     <td style="padding: 10px; color: #64748b; font-family: monospace; font-size: 13px; text-align: center; width: 80px;">${formatTime(s.time)}</td>
                     <td style="padding: 10px;"><span style="font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 14px;">${s.name}</span></td>
-                    <td style="padding: 10px; text-align: center;"><span style="background-color: #e2e8f0; color: #475569; padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 13px;">${s.class}</span></td>
+                    <!-- UPDATED: FIX "LỆCH" BADGE - Căn giữa hoàn hảo -->
+                    <td style="padding: 10px; text-align: center; vertical-align: middle;">
+                        <span style="
+                            display: inline-block; 
+                            background-color: #e2e8f0; 
+                            color: #475569; 
+                            padding: 6px 10px; 
+                            border-radius: 99px; 
+                            font-weight: 700; 
+                            font-size: 12px; 
+                            line-height: 1.5; 
+                            min-width: 60px; 
+                            text-align: center;">
+                            ${s.class}
+                        </span>
+                    </td>
                     <td style="padding: 10px; text-align: right; color: #94a3b8; font-style: italic; font-size: 12px;">${s.reporter || ''}</td>
                 </tr>`;
         });
