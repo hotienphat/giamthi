@@ -236,22 +236,19 @@ function joinRoom() {
     initPeer();
 }
 
-function initPeer(customId = null) {
+function initPeer(customId) {
     showToast('Hệ thống', 'Đang khởi tạo kết nối...');
     
-    const peerConfig = {
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' },
-            ]
-        }
-    };
+    // Sử dụng cấu hình mặc định của PeerJS để tận dụng cả STUN và TURN server của họ
+    // Điều này giúp vượt rào 4G/Wifi tốt hơn so với chỉ cố định STUN của Google.
 
-    peer = new Peer(customId, peerConfig); 
+    let peerObj;
+    if (customId) {
+        peerObj = new Peer(customId); 
+    } else {
+        peerObj = new Peer();
+    }
+    peer = peerObj;
 
     peer.on('open', (id) => {
         console.log('My Peer ID:', id);
@@ -436,6 +433,7 @@ const toTitleCase = str => str.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpper
 const removeAccents = str => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 
 const detectViolation = (text) => {
+    if (!text) return 'Chưa xác định';
     const normalized = removeAccents(text.toLowerCase()).trim();
     for (const code in VIOLATION_MAP) {
         if (VIOLATION_MAP[code].keys.some(key => normalized.includes(key))) return VIOLATION_MAP[code].label;
@@ -460,8 +458,42 @@ const smartParse = (rawText) => {
             className = classMatch[0].toUpperCase();
             name = line.substring(0, classMatch.index).replace(/[-–]/g, '').trim();
             violation = line.substring(classMatch.index + className.length).replace(/[-–]/g, '').trim();
+            
+            // Xử lý trường hợp người dùng gõ Lớp lên đầu: "12A1 Nguyễn Văn A đi muộn"
+            if (!name && violation) {
+                let rest = violation;
+                const parts = rest.split(/[-–,;]/);
+                if (parts.length >= 2) {
+                    name = parts[0].trim();
+                    violation = parts[1].trim();
+                } else {
+                    let matchedKey = '';
+                    const normalizedRest = removeAccents(rest.toLowerCase());
+                    for (const code in VIOLATION_MAP) {
+                        for (const key of VIOLATION_MAP[code].keys) {
+                            if (normalizedRest.includes(key)) {
+                                matchedKey = key;
+                                break;
+                            }
+                        }
+                        if (matchedKey) break;
+                    }
+                    if (matchedKey) {
+                        const idx = normalizedRest.indexOf(matchedKey);
+                        if (idx > 0) {
+                            name = rest.substring(0, idx).trim();
+                            violation = rest.substring(idx).trim();
+                        } else {
+                            name = rest;
+                        }
+                    } else {
+                        name = rest;
+                        violation = 'Chưa xác định';
+                    }
+                }
+            }
         } else {
-            const parts = line.split(/[-–]/);
+            const parts = line.split(/[-–,;]/);
             if (parts.length >= 2) {
                 name = parts[0].trim();
                 violation = parts[parts.length - 1].trim();
