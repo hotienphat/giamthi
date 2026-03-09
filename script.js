@@ -21,8 +21,9 @@ const HOST_SESSION_KEY = 'GiamThiAI_Host_Session';     // Key lưu phiên chủ
 const HOST_DATA_KEY = 'GiamThiAI_P2P_Data';            // Key lưu dữ liệu lỗi
 
 // --- GLOBAL STATE ---
-let peer = null;
-let conn = null; // Client connection to host
+let mqttClient = null;
+let roomTopic = '';
+let myClientId = 'client_' + Math.random().toString(16).substr(2, 8);
 let connections = []; // Host connections to clients (store objects with metadata)
 let myId = '';
 let hostId = '';
@@ -122,7 +123,7 @@ function copyPin() {
 
 function logout() {
     if(confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt và dữ liệu phiên làm việc sẽ bị xóa.')) {
-        if(peer) peer.destroy();
+        if(mqttClient) mqttClient.end();
         
         // Xóa sạch dữ liệu lưu trữ
         localStorage.removeItem(CLIENT_SESSION_KEY);
@@ -188,10 +189,10 @@ function createRoom() {
     currentUser = { name: name, role: 'HOST' };
     isHost = true;
     
-    // Generate a simpler ID for PeerJS
     const randomPin = Math.floor(100000 + Math.random() * 900000);
     myId = `GT-${randomPin}`;
     hostId = myId; 
+    roomTopic = `giamthi_room_${randomPin}`;
 
     // LƯU PHIÊN HOST VÀO LOCALSTORAGE
     localStorage.setItem(HOST_SESSION_KEY, JSON.stringify({
@@ -200,7 +201,7 @@ function createRoom() {
         pin: randomPin
     }));
 
-    initPeer(myId);
+    initMQTT(true);
 }
 
 // 2. JOIN ROOM (CLIENT)
@@ -216,7 +217,6 @@ function joinRoom() {
     let finalName = inputName;
     
     // Password check for classes
-    // BUG FIX: Check if role exists in keys instead of string check
     if (CLASS_PASSWORDS.hasOwnProperty(role)) {
         const pass = document.getElementById('join-password').value;
         if (pass !== CLASS_PASSWORDS[role]) return showToast('Lỗi', 'Sai mật khẩu lớp!', 'error');
@@ -225,6 +225,7 @@ function joinRoom() {
     currentUser = { name: finalName, role: role };
     isHost = false;
     hostId = `GT-${pin}`;
+    roomTopic = `giamthi_room_${pin}`;
     
     // LƯU PHIÊN KHÁCH VÀO LOCALSTORAGE
     localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({
@@ -233,161 +234,103 @@ function joinRoom() {
         role: role
     }));
     
-    initPeer();
+    initMQTT(false);
 }
 
-function initPeer(customId) {
-    showToast('Hệ thống', 'Đang khởi tạo kết nối...');
+function initMQTT(isHostInit) {
+    showToast('Hệ thống', 'Đang kết nối Cloud Server (MQTT)...');
     
-    // Cấu hình STUN/TURN server để vượt mọi loại tường lửa (NAT) khi khác mạng
-    const peerConfig = {
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:openrelay.metered.ca:80' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ]
+    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    
+    // Client disconnect will
+    const opts = !isHostInit ? {
+        will: {
+            topic: `${roomTopic}/client_to_host`,
+            payload: JSON.stringify({ type: 'BYE', clientId: myClientId }),
+            qos: 0,
+            retain: false
         }
-    };
+    } : {};
 
-    let peerObj;
-    if (customId) {
-        peerObj = new Peer(customId, peerConfig); 
-    } else {
-        peerObj = new Peer(undefined, peerConfig);
-    }
-    peer = peerObj;
+    mqttClient = mqtt.connect(brokerUrl, opts);
 
-    peer.on('open', (id) => {
-        console.log('My Peer ID:', id);
-        if (isHost) {
+    mqttClient.on('connect', () => {
+        if (isHostInit) {
             // Host Setup
-            const pin = id.replace('GT-', '');
+            const pin = hostId.replace('GT-', '');
             switchToMainApp(pin);
             updateStatus(`Máy chủ đang chạy`, 'green');
             loadDataLocal(); 
             renderReport();
             updateUserListUI();
-        } else {
-            // Client Setup: Connect to Host
-            connectToHost(hostId);
-            switchToMainApp();
-        }
-    });
-
-    peer.on('connection', (conn) => {
-        if (isHost) {
-            handleIncomingConnection(conn);
-        }
-    });
-
-    peer.on('error', (err) => {
-        console.error(err);
-        if(err.type === 'unavailable-id') {
-            if (isHost && localStorage.getItem(HOST_SESSION_KEY)) {
-                showToast('Thông báo', 'Tạo mã phòng mới...', 'warning');
-                const newPin = Math.floor(100000 + Math.random() * 900000);
-                myId = `GT-${newPin}`;
-                hostId = myId;
-                
-                const currentSession = JSON.parse(localStorage.getItem(HOST_SESSION_KEY));
-                currentSession.pin = newPin;
-                localStorage.setItem(HOST_SESSION_KEY, JSON.stringify(currentSession));
-                
-                initPeer(myId); 
-                return;
-            }
             
-            alert('Mã phòng này đang được sử dụng. Hãy thử lại.');
-            localStorage.removeItem(CLIENT_SESSION_KEY); 
-            location.reload();
-        } else if(err.type === 'peer-unavailable') {
-            showToast('Lỗi', 'Không tìm thấy phòng! Hãy kiểm tra mã PIN.', 'error');
-            updateStatus('Không tìm thấy Host', 'red');
+            mqttClient.subscribe(`${roomTopic}/client_to_host`);
         } else {
-            showToast('Lỗi', 'Lỗi kết nối P2P.', 'error');
+            // Client Setup
+            switchToMainApp();
+            updateStatus('Đang đồng bộ...', 'yellow');
+            
+            mqttClient.subscribe(`${roomTopic}/host_to_client`);
+            mqttClient.subscribe(`${roomTopic}/host_to_client/${myClientId}`);
+            
+            // Say hello to host
+            mqttClient.publish(`${roomTopic}/client_to_host`, JSON.stringify({
+                type: 'HELLO',
+                clientId: myClientId,
+                metadata: { name: currentUser.name, role: currentUser.role }
+            }));
         }
     });
-}
 
-// --- HOST LOGIC ---
-function handleIncomingConnection(c) {
-    c.on('open', () => {
-        connections.push(c);
-        const clientName = c.metadata?.name || 'Ẩn danh';
-        const clientRole = c.metadata?.role || 'Unknown';
-        
-        showToast('Kết nối mới', `${clientName} (${clientRole}) đã vào phòng`);
-        updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
-        updateUserListUI();
-
-        c.send({ type: 'SYNC_FULL', data: violationsData });
+    mqttClient.on('message', (topic, message) => {
+        try {
+            const payload = JSON.parse(message.toString());
+            if (isHostInit && topic === `${roomTopic}/client_to_host`) {
+                if (payload.type === 'HELLO') {
+                    if (!connections.find(c => c.id === payload.clientId)) {
+                        connections.push({ id: payload.clientId, metadata: payload.metadata });
+                        showToast('Kết nối mới', `${payload.metadata.name} (${payload.metadata.role}) đã vào phòng`);
+                        updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+                        updateUserListUI();
+                    }
+                    mqttClient.publish(`${roomTopic}/host_to_client/${payload.clientId}`, JSON.stringify({
+                        type: 'SYNC_FULL',
+                        data: violationsData
+                    }));
+                } else if (payload.type === 'BYE') {
+                    connections = connections.filter(c => c.id !== payload.clientId);
+                    updateUserListUI();
+                    updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+                } else {
+                    handleDataPacket(payload);
+                }
+            } else if (!isHostInit && topic.startsWith(`${roomTopic}/host_to_client`)) {
+                if (payload.type === 'SYNC_FULL' && document.getElementById('connection-status-text').textContent.includes('đồng bộ')) {
+                    updateStatus('Đã kết nối với Giám Thị', 'green');
+                    showToast('Thành công', 'Đã vào phòng!');
+                }
+                handleDataPacket(payload);
+            }
+        } catch (e) {
+            console.error('Lỗi parse msg:', e);
+        }
     });
 
-    c.on('data', (data) => {
-        handleDataPacket(data);
+    mqttClient.on('error', (err) => {
+        console.error('MQTT Error:', err);
+        updateStatus('Lỗi Server', 'red');
+        showToast('Lỗi', 'Không kết nối được server trung gian', 'error');
     });
 
-    c.on('close', () => {
-        connections = connections.filter(conn => conn !== c);
-        updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
-        updateUserListUI();
-    });
-    
-    c.on('error', () => {
-        connections = connections.filter(conn => conn !== c);
-        updateUserListUI();
+    mqttClient.on('close', () => {
+        // updateStatus('Mất kết nối', 'red');
     });
 }
 
 function broadcast(packet) {
-    connections.forEach(c => {
-        if(c.open) c.send(packet);
-    });
-}
-
-// --- CLIENT LOGIC ---
-function connectToHost(id) {
-    updateStatus('Đang tìm máy chủ...', 'yellow');
-    
-    conn = peer.connect(id, {
-        metadata: {
-            name: currentUser.name,
-            role: currentUser.role
-        }
-    });
-
-    conn.on('open', () => {
-        updateStatus('Đã kết nối với Giám Thị', 'green');
-        showToast('Thành công', 'Đã vào phòng!');
-    });
-
-    conn.on('data', (data) => {
-        handleDataPacket(data);
-    });
-
-    conn.on('close', () => {
-        updateStatus('Mất kết nối Host', 'red');
-        showToast('Lỗi', 'Host đã thoát hoặc mất mạng.', 'error');
-    });
-    
-    conn.on('error', () => {
-        updateStatus('Lỗi kết nối', 'red');
-    });
+    if (mqttClient && mqttClient.connected) {
+        mqttClient.publish(`${roomTopic}/host_to_client`, JSON.stringify(packet));
+    }
 }
 
 // --- DATA HANDLING (BOTH) ---
@@ -431,10 +374,10 @@ function sendData(packet) {
     if (isHost) {
         handleDataPacket(packet);
     } else {
-        if (conn && conn.open) {
-            conn.send(packet);
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.publish(`${roomTopic}/client_to_host`, JSON.stringify(packet));
         } else {
-            showToast('Lỗi', 'Chưa kết nối Host', 'error');
+            showToast('Lỗi', 'Chưa kết nối Máy chủ', 'error');
         }
     }
 }
@@ -932,8 +875,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentUser = { name: sess.name, role: sess.role };
                 isHost = false;
                 hostId = `GT-${sess.pin}`;
+                roomTopic = `giamthi_room_${sess.pin}`;
                 showToast('Khôi phục', 'Đang kết nối lại phòng cũ...');
-                initPeer();
+                initMQTT(false);
                 return; // Thoát luôn nếu là khách
             }
         } catch(e) { console.error(e); localStorage.removeItem(CLIENT_SESSION_KEY); }
@@ -950,10 +894,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 isHost = true;
                 myId = `GT-${sess.pin}`;
                 hostId = myId;
+                roomTopic = `giamthi_room_${sess.pin}`;
                 
                 showToast('Khôi phục', 'Đang khôi phục phòng máy chủ...');
-                initPeer(myId); // Khởi tạo lại với ID cũ
-                // Data sẽ được load trong initPeer -> 'open'
+                initMQTT(true);
             }
         } catch(e) { console.error(e); localStorage.removeItem(HOST_SESSION_KEY); }
     }
