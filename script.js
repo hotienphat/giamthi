@@ -239,14 +239,36 @@ function joinRoom() {
 function initPeer(customId) {
     showToast('Hệ thống', 'Đang khởi tạo kết nối...');
     
-    // Sử dụng cấu hình mặc định của PeerJS để tận dụng cả STUN và TURN server của họ
-    // Điều này giúp vượt rào 4G/Wifi tốt hơn so với chỉ cố định STUN của Google.
+    // Cấu hình STUN/TURN server để vượt mọi loại tường lửa (NAT) khi khác mạng
+    const peerConfig = {
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:openrelay.metered.ca:80' },
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
+            ]
+        }
+    };
 
     let peerObj;
     if (customId) {
-        peerObj = new Peer(customId); 
+        peerObj = new Peer(customId, peerConfig); 
     } else {
-        peerObj = new Peer();
+        peerObj = new Peer(undefined, peerConfig);
     }
     peer = peerObj;
 
