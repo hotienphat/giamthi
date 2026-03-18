@@ -1,12 +1,12 @@
 // --- CONFIG & CONSTANTS ---
 const CLASS_PASSWORDS = {
-    '12A1': '1231', '12A2': '1232', '12A3': '1233', 
+    '12A1': '1231', '12A2': '1232', '12A3': '1233',
     '12A4': '1234', '12A5': '1235', '12A6': '1236',
     '11B1': '1131' // UPDATED: Mật khẩu mặc định cho 11B1
 };
 const VIOLATION_MAP = {
     'KHONG_MANG_THE': { label: 'Không mang thẻ học viên', keys: ['the', 'khong mang the', 'deo the', 'quang the', 'quen the', 'k the', 'ko the'] },
-    'KHONG_MAC_AO_DOAN': { label: 'Không mặc áo đoàn', keys: ['ao doan', 'doan', 'aodoan', 'khong mac ao doan', 'k ao doan', 'thieu ao doan'] },
+    'KHONG_MAC_AO_DOAN': { label: 'Không mặc áo đoàn', keys: ['ao doan', 'doan', 'aodoan', 'khong mac ao doan', 'k ao doan', 'thieu ao doan', 'ao'] },
     'DI_XE_50CC': { label: 'Đi xe trên 50cc', keys: ['xe', 'may', '50cc', 'phan khoi', 'xe may', 'xe to'] },
     'NHUOM_TOC': { label: 'Nhuộm tóc / Đầu tóc', keys: ['toc', 'nhuom', 'dau toc', 'toc tai', 'nhuom toc'] },
     'KHONG_DONG_THUNG': { label: 'Không đóng thùng (Sơ vin)', keys: ['thung', 'so vin', 'bo ao', 'khong dong thung', 'dong thung', 'chua so vin'] },
@@ -61,7 +61,7 @@ function togglePasswordInput() {
     const role = document.getElementById('join-role').value;
     const passField = document.getElementById('password-field');
     const guestNameField = document.getElementById('guest-name-field');
-    
+
     // Luôn hiện ô nhập tên người trực
     guestNameField.classList.remove('hidden');
 
@@ -85,11 +85,11 @@ function switchToMainApp(pin) {
     const app = document.getElementById('main-app');
     app.classList.remove('hidden');
     setTimeout(() => app.classList.remove('opacity-0'), 100);
-    
+
     document.getElementById('display-name').textContent = currentUser.name || currentUser.role;
     document.getElementById('display-role').textContent = currentUser.role;
-    
-    if(pin) {
+
+    if (pin) {
         document.getElementById('display-pin').textContent = pin;
         document.getElementById('pin-container').classList.remove('hidden');
     }
@@ -100,7 +100,7 @@ function switchToMainApp(pin) {
 
     // Populate datalist for edit modal
     const dataList = document.getElementById('violation-suggestions');
-    if(dataList) {
+    if (dataList) {
         dataList.innerHTML = '';
         Object.values(VIOLATION_MAP).forEach(v => {
             const opt = document.createElement('option');
@@ -108,11 +108,11 @@ function switchToMainApp(pin) {
             dataList.appendChild(opt);
         });
     }
-    
+
     // Tự động kiểm tra thiết bị để set toggle Enter
     const isMobile = window.innerWidth <= 768;
     const enterToggle = document.getElementById('enter-to-send');
-    if(enterToggle) enterToggle.checked = !isMobile;
+    if (enterToggle) enterToggle.checked = !isMobile;
 }
 
 function copyPin() {
@@ -122,14 +122,14 @@ function copyPin() {
 }
 
 function logout() {
-    if(confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt và dữ liệu phiên làm việc sẽ bị xóa.')) {
-        if(mqttClient) mqttClient.end();
-        
+    if (confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt và dữ liệu phiên làm việc sẽ bị xóa.')) {
+        if (mqttClient) mqttClient.end();
+
         // Xóa sạch dữ liệu lưu trữ
         localStorage.removeItem(CLIENT_SESSION_KEY);
         localStorage.removeItem(HOST_SESSION_KEY);
         localStorage.removeItem(HOST_DATA_KEY);
-        
+
         location.reload();
     }
 }
@@ -143,9 +143,9 @@ function toggleUserList() {
 function updateUserListUI() {
     const badge = document.getElementById('user-count-badge');
     const listUl = document.getElementById('user-list-ul');
-    
+
     badge.textContent = connections.length;
-    
+
     if (connections.length === 0) {
         listUl.innerHTML = '<li class="text-gray-500 text-xs text-center p-2 italic">Chưa có ai kết nối...</li>';
         return;
@@ -157,7 +157,7 @@ function updateUserListUI() {
         // Icon based on role
         let icon = 'fa-user';
         let colorClass = 'text-gray-400';
-        
+
         // BUG FIX: Mở rộng kiểm tra icon cho cả khối 11 và 12
         if (meta.role.startsWith('12') || meta.role.startsWith('11')) { icon = 'fa-users'; colorClass = 'text-blue-400'; }
         else if (meta.role === 'MONITOR') { icon = 'fa-user-shield'; colorClass = 'text-green-400'; }
@@ -188,10 +188,10 @@ function createRoom() {
 
     currentUser = { name: name, role: 'HOST' };
     isHost = true;
-    
+
     const randomPin = Math.floor(100000 + Math.random() * 900000);
     myId = `GT-${randomPin}`;
-    hostId = myId; 
+    hostId = myId;
     roomTopic = `giamthi_room_${randomPin}`;
 
     // LƯU PHIÊN HOST VÀO LOCALSTORAGE
@@ -209,13 +209,13 @@ function joinRoom() {
     const pin = document.getElementById('join-pin').value.trim();
     const role = document.getElementById('join-role').value;
     const inputName = document.getElementById('guest-name').value.trim();
-    
+
     if (!pin || pin.length !== 6) return showToast('Lỗi', 'Mã PIN gồm 6 số', 'error');
     if (!role) return showToast('Lỗi', 'Chọn vai trò', 'error');
     if (!inputName) return showToast('Lỗi', 'Vui lòng nhập tên người trực', 'error');
 
     let finalName = inputName;
-    
+
     // Password check for classes
     if (CLASS_PASSWORDS.hasOwnProperty(role)) {
         const pass = document.getElementById('join-password').value;
@@ -226,22 +226,22 @@ function joinRoom() {
     isHost = false;
     hostId = `GT-${pin}`;
     roomTopic = `giamthi_room_${pin}`;
-    
+
     // LƯU PHIÊN KHÁCH VÀO LOCALSTORAGE
     localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({
         pin: pin,
         name: finalName,
         role: role
     }));
-    
+
     initMQTT(false);
 }
 
 function initMQTT(isHostInit) {
     showToast('Hệ thống', 'Đang kết nối Cloud Server (MQTT)...');
-    
+
     const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
-    
+
     // Client disconnect will
     const opts = !isHostInit ? {
         will: {
@@ -260,19 +260,19 @@ function initMQTT(isHostInit) {
             const pin = hostId.replace('GT-', '');
             switchToMainApp(pin);
             updateStatus(`Máy chủ đang chạy`, 'green');
-            loadDataLocal(); 
+            loadDataLocal();
             renderReport();
             updateUserListUI();
-            
+
             mqttClient.subscribe(`${roomTopic}/client_to_host`);
         } else {
             // Client Setup
             switchToMainApp();
             updateStatus('Đang đồng bộ...', 'yellow');
-            
+
             mqttClient.subscribe(`${roomTopic}/host_to_client`);
             mqttClient.subscribe(`${roomTopic}/host_to_client/${myClientId}`);
-            
+
             // Say hello to host
             mqttClient.publish(`${roomTopic}/client_to_host`, JSON.stringify({
                 type: 'HELLO',
@@ -338,7 +338,7 @@ function handleDataPacket(packet) {
     if (packet.type === 'SYNC_FULL') {
         violationsData = packet.data;
         renderReport();
-        if(isHost) saveDataLocal();
+        if (isHost) saveDataLocal();
     } else if (packet.type === 'ADD_ITEMS') {
         violationsData = [...violationsData, ...packet.items];
         renderReport();
@@ -349,7 +349,7 @@ function handleDataPacket(packet) {
     } else if (packet.type === 'REMOVE_ITEM') {
         violationsData = violationsData.filter(v => v.id !== packet.id);
         renderReport();
-        if(isHost) {
+        if (isHost) {
             saveDataLocal();
             broadcast({ type: 'SYNC_FULL', data: violationsData });
         }
@@ -366,7 +366,7 @@ function handleDataPacket(packet) {
     } else if (packet.type === 'CLEAR_ALL') {
         violationsData = [];
         renderReport();
-        if(isHost) saveDataLocal();
+        if (isHost) saveDataLocal();
     }
 }
 
@@ -384,12 +384,12 @@ function sendData(packet) {
 
 // --- STORAGE (HOST ONLY) ---
 function saveDataLocal() {
-    if(isHost) localStorage.setItem(HOST_DATA_KEY, JSON.stringify(violationsData));
+    if (isHost) localStorage.setItem(HOST_DATA_KEY, JSON.stringify(violationsData));
 }
 function loadDataLocal() {
     const saved = localStorage.getItem(HOST_DATA_KEY);
-    if(saved) {
-        try { violationsData = JSON.parse(saved); } catch(e) {}
+    if (saved) {
+        try { violationsData = JSON.parse(saved); } catch (e) { }
     }
 }
 
@@ -411,19 +411,19 @@ const smartParse = (rawText) => {
     const results = [];
     // BUG FIX: Regex is fine, but ensuring it captures newer classes if format changes
     const classRegex = /\b([1-9][0-2]?[a-zA-Z][0-9]{0,2})\b/;
-    const now = new Date().toISOString(); 
-    
+    const now = new Date().toISOString();
+
     lines.forEach(line => {
         line = line.trim().replace(/\s+/g, ' ');
         if (!line) return;
         let name = '', className = '', violation = '';
         const classMatch = line.match(classRegex);
-        
+
         if (classMatch) {
             className = classMatch[0].toUpperCase();
             name = line.substring(0, classMatch.index).replace(/[-–]/g, '').trim();
             violation = line.substring(classMatch.index + className.length).replace(/[-–]/g, '').trim();
-            
+
             // Xử lý trường hợp người dùng gõ Lớp lên đầu: "12A1 Nguyễn Văn A đi muộn"
             if (!name && violation) {
                 let rest = violation;
@@ -472,13 +472,13 @@ const smartParse = (rawText) => {
                 violation = 'Chưa xác định';
             }
         }
-        
+
         if (name) {
             // Hỗ trợ đa vi phạm: tách violation theo dấu phẩy
             const violationParts = violation
                 ? violation.split(',').map(v => v.trim()).filter(v => v.length > 0)
                 : ['Chưa xác định'];
-            
+
             violationParts.forEach(vPart => {
                 results.push({
                     id: Date.now() + Math.random().toString(),
@@ -497,22 +497,22 @@ const smartParse = (rawText) => {
 const renderReport = () => {
     const container = document.getElementById('report-container');
     document.getElementById('count-badge').textContent = violationsData.length;
-    
+
     if (violationsData.length === 0) {
         container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60"><i class="fa-solid fa-clipboard-check text-6xl mb-4"></i><p>Không tìm thấy vi phạm nào</p></div>`;
         return;
     }
 
     const groupedData = {};
-    violationsData.forEach(s => { 
-        const v = s.violation || 'Lỗi khác'; 
-        if (!groupedData[v]) groupedData[v] = []; 
-        groupedData[v].push(s); 
+    violationsData.forEach(s => {
+        const v = s.violation || 'Lỗi khác';
+        if (!groupedData[v]) groupedData[v] = [];
+        groupedData[v].push(s);
     });
 
     let html = '';
     let sttTotal = 1;
-    
+
     for (const [vName, students] of Object.entries(groupedData)) {
         html += `
         <div class="mb-6 animate-fade-in">
@@ -532,9 +532,9 @@ const renderReport = () => {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-700/50">`;
-        
+
         students.forEach(s => {
-            const timeStr = new Date(s.time).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+            const timeStr = new Date(s.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             html += `
             <tr class="hover:bg-gray-700/30 transition-colors group">
                 <td class="p-3 text-gray-500 font-mono text-sm text-center">${sttTotal++}</td>
@@ -568,7 +568,7 @@ window.openEditModal = (id) => {
     document.getElementById('edit-name').value = item.name;
     document.getElementById('edit-class').value = item.class;
     document.getElementById('edit-violation').value = item.violation;
-    
+
     document.getElementById('edit-modal').classList.remove('hidden');
 };
 
@@ -587,25 +587,25 @@ window.saveEdit = () => {
         return;
     }
 
-    sendData({ 
-        type: 'UPDATE_ITEM', 
-        data: { id, name, class: className, violation } 
+    sendData({
+        type: 'UPDATE_ITEM',
+        data: { id, name, class: className, violation: detectViolation(violation) }
     });
-    
+
     closeEditModal();
     showToast('Thành công', 'Đã cập nhật báo cáo');
 };
 
 window.deleteRow = (id) => {
-    if(confirm('Bạn có chắc muốn xóa lỗi này?')) {
+    if (confirm('Bạn có chắc muốn xóa lỗi này?')) {
         sendData({ type: 'REMOVE_ITEM', id: id });
     }
 };
 
 document.getElementById('clear-all-btn').addEventListener('click', () => {
-    if(confirm('Xóa TẤT CẢ dữ liệu trên các máy?')) {
+    if (confirm('Xóa TẤT CẢ dữ liệu trên các máy?')) {
         sendData({ type: 'CLEAR_ALL' });
-        if(isHost) {
+        if (isHost) {
             violationsData = [];
             renderReport();
             saveDataLocal();
@@ -629,7 +629,7 @@ document.addEventListener('click', (e) => {
 
 ['time', 'name', 'class', 'reporter'].forEach(key => {
     const el = document.getElementById(`show-${key}`);
-    if(el) {
+    if (el) {
         el.addEventListener('change', (e) => {
             displaySettings[key] = e.target.checked;
             renderReport();
@@ -648,9 +648,9 @@ document.getElementById('join-role').addEventListener('change', togglePasswordIn
 document.getElementById('process-btn').addEventListener('click', () => {
     const input = document.getElementById('text-input');
     if (!input.value.trim()) return showToast('Lỗi', 'Nhập dữ liệu!', 'error');
-    
+
     const newStudents = smartParse(input.value);
-    if(newStudents.length > 0) {
+    if (newStudents.length > 0) {
         sendData({ type: 'ADD_ITEMS', items: newStudents });
         input.value = '';
         showToast('Gửi', `Đã gửi ${newStudents.length} lỗi`);
@@ -662,8 +662,8 @@ document.getElementById('process-btn').addEventListener('click', () => {
 document.getElementById('text-input').addEventListener('keydown', (e) => {
     const enterToSend = document.getElementById('enter-to-send').checked;
     if (enterToSend && e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); 
-        document.getElementById('process-btn').click(); 
+        e.preventDefault();
+        document.getElementById('process-btn').click();
     }
 });
 
@@ -689,7 +689,7 @@ document.getElementById('excel-input').addEventListener('change', (e) => {
         for (let i = 1; i < json.length; i++) {
             const row = json[i];
             // Cần ít nhất tên (cột 2) và lỗi (cột 4)
-            if (row[2] && row[4]) { 
+            if (row[2] && row[4]) {
                 newItems.push({
                     id: Date.now() + Math.random().toString(),
                     time: now, // Dùng thời gian hiện tại khi import
@@ -707,7 +707,7 @@ document.getElementById('excel-input').addEventListener('change', (e) => {
         } else {
             showToast('Lỗi', 'Không tìm thấy dữ liệu hợp lệ trong file', 'error');
         }
-        
+
         // Reset input để có thể chọn lại file cũ nếu muốn
         document.getElementById('excel-input').value = '';
     };
@@ -720,14 +720,16 @@ document.getElementById('ocr-input').addEventListener('change', async (e) => {
     if (!file) return;
     document.getElementById('ocr-loading').classList.remove('hidden');
     try {
-        const worker = Tesseract.createWorker({ logger: m => { 
-            if(m.status === 'recognizing text') document.getElementById('ocr-progress').style.width = `${Math.round(m.progress * 100)}%`; 
-        }});
+        const worker = Tesseract.createWorker({
+            logger: m => {
+                if (m.status === 'recognizing text') document.getElementById('ocr-progress').style.width = `${Math.round(m.progress * 100)}%`;
+            }
+        });
         await worker.load(); await worker.loadLanguage('eng'); await worker.initialize('eng');
         const { data: { text } } = await worker.recognize(file);
         document.getElementById('text-input').value += '\n' + text;
         await worker.terminate();
-    } catch { showToast('Lỗi', 'OCR thất bại', 'error'); } 
+    } catch { showToast('Lỗi', 'OCR thất bại', 'error'); }
     finally { document.getElementById('ocr-loading').classList.add('hidden'); e.target.value = ''; }
 });
 
@@ -745,24 +747,24 @@ if ('webkitSpeechRecognition' in window) {
 document.getElementById('export-png-btn').addEventListener('click', () => {
     if (violationsData.length === 0) return showToast('Lỗi', 'Chưa có dữ liệu để xuất', 'error');
     showToast('Đang xử lý', 'Đang tạo phiếu báo cáo...');
-    
+
     const exportDiv = document.createElement('div');
-    Object.assign(exportDiv.style, { 
-        position: 'fixed', top: '0', left: '-9999px', zIndex: '9999', 
-        width: '800px', backgroundColor: '#ffffff', color: '#1a1a1a', 
-        fontFamily: "'Be Vietnam Pro', sans-serif", padding: '40px', boxSizing: 'border-box' 
+    Object.assign(exportDiv.style, {
+        position: 'fixed', top: '0', left: '-9999px', zIndex: '9999',
+        width: '800px', backgroundColor: '#ffffff', color: '#1a1a1a',
+        fontFamily: "'Be Vietnam Pro', sans-serif", padding: '40px', boxSizing: 'border-box'
     });
 
     const groupedData = {};
-    violationsData.forEach(s => { 
-        const v = s.violation || 'Lỗi khác'; 
-        if (!groupedData[v]) groupedData[v] = []; 
-        groupedData[v].push(s); 
+    violationsData.forEach(s => {
+        const v = s.violation || 'Lỗi khác';
+        if (!groupedData[v]) groupedData[v] = [];
+        groupedData[v].push(s);
     });
 
     let groupsHtml = '';
     let sttTotal = 1;
-    const formatTime = (iso) => new Date(iso).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+    const formatTime = (iso) => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
     for (const [vName, students] of Object.entries(groupedData)) {
         let studentsHtml = '';
@@ -830,7 +832,7 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
             <div style="padding: 20px; background-color: #f8fafc; border-bottom: 2px solid #e5e7eb; font-size: 14px; display: flex; justify-content: space-between;">
                 <div>
                     <div><span style="color: #64748b; font-weight: 600;">Ngày:</span> <b>${dateStr}</b></div>
-                    <div><span style="color: #64748b; font-weight: 600;">Mã phòng:</span> <b>#${hostId ? hostId.replace('GT-','') : 'OFFLINE'}</b></div>
+                    <div><span style="color: #64748b; font-weight: 600;">Mã phòng:</span> <b>#${hostId ? hostId.replace('GT-', '') : 'OFFLINE'}</b></div>
                 </div>
                 <div style="text-align: right;">
                         <div>${roleText}</div>
@@ -849,7 +851,7 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
     setTimeout(() => {
         html2canvas(exportDiv, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
             const link = document.createElement('a');
-            link.download = `Phieu_Vi_Pham_${dateStr.replace(/\//g,'-')}.png`;
+            link.download = `Phieu_Vi_Pham_${dateStr.replace(/\//g, '-')}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
             document.body.removeChild(exportDiv);
@@ -863,10 +865,10 @@ document.getElementById('export-png-btn').addEventListener('click', () => {
 });
 
 document.getElementById('export-excel-btn').addEventListener('click', () => {
-    if(violationsData.length === 0) return;
+    if (violationsData.length === 0) return;
     const wb = XLSX.utils.book_new();
     const wsData = [['STT', 'Thời gian', 'Họ Tên', 'Lớp', 'Lỗi', 'Người báo']];
-    violationsData.forEach((s, i) => wsData.push([i+1, new Date(s.time).toLocaleString(), s.name, s.class, s.violation, s.reporter]));
+    violationsData.forEach((s, i) => wsData.push([i + 1, new Date(s.time).toLocaleString(), s.name, s.class, s.violation, s.reporter]));
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(wb, ws, "ViPham");
     XLSX.writeFile(wb, `DS_Loi_${hostId || 'Offline'}.xlsx`);
@@ -878,10 +880,10 @@ setInterval(() => document.getElementById('realtime-clock').textContent = new Da
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Kiểm tra session Khách
     const savedClientSession = localStorage.getItem(CLIENT_SESSION_KEY);
-    if(savedClientSession) {
+    if (savedClientSession) {
         try {
             const sess = JSON.parse(savedClientSession);
-            if(sess && sess.pin) {
+            if (sess && sess.pin) {
                 console.log('Phát hiện phiên khách cũ:', sess);
                 currentUser = { name: sess.name, role: sess.role };
                 isHost = false;
@@ -891,25 +893,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 initMQTT(false);
                 return; // Thoát luôn nếu là khách
             }
-        } catch(e) { console.error(e); localStorage.removeItem(CLIENT_SESSION_KEY); }
+        } catch (e) { console.error(e); localStorage.removeItem(CLIENT_SESSION_KEY); }
     }
 
     // 2. Kiểm tra session Chủ (Host)
     const savedHostSession = localStorage.getItem(HOST_SESSION_KEY);
-    if(savedHostSession) {
+    if (savedHostSession) {
         try {
             const sess = JSON.parse(savedHostSession);
-            if(sess && sess.pin) {
+            if (sess && sess.pin) {
                 console.log('Phát hiện phiên Host cũ:', sess);
                 currentUser = { name: sess.name, role: 'HOST' };
                 isHost = true;
                 myId = `GT-${sess.pin}`;
                 hostId = myId;
                 roomTopic = `giamthi_room_${sess.pin}`;
-                
+
                 showToast('Khôi phục', 'Đang khôi phục phòng máy chủ...');
                 initMQTT(true);
             }
-        } catch(e) { console.error(e); localStorage.removeItem(HOST_SESSION_KEY); }
+        } catch (e) { console.error(e); localStorage.removeItem(HOST_SESSION_KEY); }
     }
 });
