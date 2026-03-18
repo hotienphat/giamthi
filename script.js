@@ -427,30 +427,34 @@ const smartParse = (rawText) => {
             // Xử lý trường hợp người dùng gõ Lớp lên đầu: "12A1 Nguyễn Văn A đi muộn"
             if (!name && violation) {
                 let rest = violation;
-                const parts = rest.split(/[-–,;]/);
-                if (parts.length >= 2) {
-                    name = parts[0].trim();
-                    violation = parts[1].trim();
+                // Chỉ dùng dấu gạch ngang/chấm phẩy để tách tên - KHÔNG dùng dấu phẩy
+                // vì dấu phẩy được dùng để phân cách đa vi phạm
+                const dashParts = rest.split(/[-–;]/);
+                if (dashParts.length >= 2) {
+                    name = dashParts[0].trim();
+                    // Giữ toàn bộ phần còn lại (có thể có nhiều vi phạm cách nhau bởi phẩy)
+                    violation = dashParts.slice(1).join(',').trim();
                 } else {
+                    // Dùng keyword detection để tìm ranh giới tên/vi phạm
                     let matchedKey = '';
+                    let matchedIdx = Infinity;
                     const normalizedRest = removeAccents(rest.toLowerCase());
                     for (const code in VIOLATION_MAP) {
                         for (const key of VIOLATION_MAP[code].keys) {
-                            if (normalizedRest.includes(key)) {
+                            const idx = normalizedRest.indexOf(key);
+                            if (idx !== -1 && idx < matchedIdx) {
+                                matchedIdx = idx;
                                 matchedKey = key;
-                                break;
                             }
                         }
-                        if (matchedKey) break;
                     }
-                    if (matchedKey) {
-                        const idx = normalizedRest.indexOf(matchedKey);
-                        if (idx > 0) {
-                            name = rest.substring(0, idx).trim();
-                            violation = rest.substring(idx).trim();
-                        } else {
-                            name = rest;
-                        }
+                    if (matchedKey && matchedIdx > 0) {
+                        name = rest.substring(0, matchedIdx).trim();
+                        // Giữ toàn bộ phần violation từ vị trí keyword trở đi
+                        violation = rest.substring(matchedIdx).trim();
+                    } else if (matchedKey && matchedIdx === 0) {
+                        name = rest;
+                        violation = '';
                     } else {
                         name = rest;
                         violation = 'Chưa xác định';
@@ -470,13 +474,20 @@ const smartParse = (rawText) => {
         }
         
         if (name) {
-            results.push({
-                id: Date.now() + Math.random().toString(), 
-                name: toTitleCase(name),
-                class: className || '?',
-                violation: detectViolation(violation),
-                time: now,
-                reporter: currentUser.name 
+            // Hỗ trợ đa vi phạm: tách violation theo dấu phẩy
+            const violationParts = violation
+                ? violation.split(',').map(v => v.trim()).filter(v => v.length > 0)
+                : ['Chưa xác định'];
+            
+            violationParts.forEach(vPart => {
+                results.push({
+                    id: Date.now() + Math.random().toString(),
+                    name: toTitleCase(name),
+                    class: className || '?',
+                    violation: detectViolation(vPart),
+                    time: now,
+                    reporter: currentUser.name
+                });
             });
         }
     });
