@@ -1,284 +1,330 @@
+// ============================================================
+//  TRỢ LÝ GIÁM THỊ AI — script.js  v3.0
+//  Cải tiến: Toast premium, animation, fixes all known bugs
+// ============================================================
+
 // --- CONFIG & CONSTANTS ---
 const CLASS_PASSWORDS = {
     '12A1': '1231', '12A2': '1232', '12A3': '1233',
     '12A4': '1234', '12A5': '1235', '12A6': '1236',
-    '11B1': '1131' // UPDATED: Mật khẩu mặc định cho 11B1
-};
-const VIOLATION_MAP = {
-    'KHONG_MANG_THE': { label: 'Không mang thẻ học viên', keys: ['the', 'khong mang the', 'deo the', 'quang the', 'quen the', 'k the', 'ko the'] },
-    'KHONG_MAC_AO_DOAN': { label: 'Không mặc áo đoàn', keys: ['ao doan', 'doan', 'aodoan', 'khong mac ao doan', 'k ao doan', 'thieu ao doan', 'ao'] },
-    'DI_XE_50CC': { label: 'Đi xe trên 50cc', keys: ['xe', 'may', '50cc', 'phan khoi', 'xe may', 'xe to'] },
-    'NHUOM_TOC': { label: 'Nhuộm tóc / Đầu tóc', keys: ['toc', 'nhuom', 'dau toc', 'toc tai', 'nhuom toc'] },
-    'KHONG_DONG_THUNG': { label: 'Không đóng thùng (Sơ vin)', keys: ['thung', 'so vin', 'bo ao', 'khong dong thung', 'dong thung', 'chua so vin'] },
-    'KHONG_MAC_AO_DAI': { label: 'Không mặc áo dài', keys: ['ao dai', 'aod', 'khong mac ao dai', 'mac sai ao dai'] },
-    'MANG_DEP_LE': { label: 'Mang dép lê', keys: ['dep', 'dep le', 'mang dep', 'di dep', 'le'] },
-    'DI_HOC_MUON': { label: 'Đi học muộn', keys: ['muon', 'tre', 'di muon', 'di tre'] },
-    'KHONG_TRUC_NHAT': { label: 'Không trực nhật', keys: ['truc nhat', 've sinh', 'quet lop'] }
+    '11B1': '1131'
 };
 
-const CLIENT_SESSION_KEY = 'GiamThiAI_Client_Session'; // Key lưu phiên khách
-const HOST_SESSION_KEY = 'GiamThiAI_Host_Session';     // Key lưu phiên chủ
-const HOST_DATA_KEY = 'GiamThiAI_P2P_Data';            // Key lưu dữ liệu lỗi
+const VIOLATION_MAP = {
+    'KHONG_MANG_THE':    { label: 'Không mang thẻ học viên',      keys: ['the', 'khong mang the', 'deo the', 'quang the', 'quen the', 'k the', 'ko the', 'mat the'] },
+    'KHONG_MAC_AO_DAI':  { label: 'Không mặc áo dài',            keys: ['ao dai', 'aodai', 'aod', 'khong mac ao dai', 'mac sai ao dai', 'k ao dai', 'thieu ao dai'] },
+    'KHONG_MAC_AO_DOAN': { label: 'Không mặc áo đoàn',            keys: ['ao doan', 'aodoan', 'doan', 'khong mac ao doan', 'k ao doan', 'thieu ao doan'] },
+    'DI_XE_50CC':        { label: 'Đi xe trên 50cc',              keys: ['xe', 'may', '50cc', 'phan khoi', 'xe may', 'xe to'] },
+    'NHUOM_TOC':         { label: 'Nhuộm tóc / Đầu tóc',         keys: ['toc', 'nhuom', 'dau toc', 'toc tai', 'nhuom toc'] },
+    'KHONG_DONG_THUNG':  { label: 'Không đóng thùng (Sơ vin)',    keys: ['thung', 'so vin', 'bo ao', 'khong dong thung', 'dong thung', 'chua so vin'] },
+    'MANG_DEP_LE':       { label: 'Mang dép lê',                  keys: ['dep', 'dep le', 'mang dep', 'di dep', 'le'] },
+    'DI_HOC_MUON':       { label: 'Đi học muộn',                  keys: ['muon', 'tre', 'di muon', 'di tre'] },
+    'KHONG_TRUC_NHAT':   { label: 'Không trực nhật',              keys: ['truc nhat', 've sinh', 'quet lop'] },
+    'SU_DUNG_DIEN_THOAI':{ label: 'Sử dụng điện thoại',          keys: ['dien thoai', 'dien thoai trong lop', 'choi dien thoai', 'dt'] }
+};
+
+const CLIENT_SESSION_KEY = 'GiamThiAI_v3_Client';
+const HOST_SESSION_KEY   = 'GiamThiAI_v3_Host';
+const HOST_DATA_KEY      = 'GiamThiAI_v3_Data';
+
+// Broker pool - tự động fallback nếu 1 bị lỗi
+const MQTT_BROKERS = [
+    'wss://broker.emqx.io:8084/mqtt',
+    'wss://test.mosquitto.org:8081/mqtt'
+];
 
 // --- GLOBAL STATE ---
-let mqttClient = null;
-let roomTopic = '';
-let myClientId = 'client_' + Math.random().toString(16).substr(2, 8);
-let connections = []; // Host connections to clients (store objects with metadata)
-let myId = '';
-let hostId = '';
-let currentUser = { name: '', role: '' };
+let mqttClient    = null;
+let roomTopic     = '';
+let myClientId    = 'client_' + Math.random().toString(16).substring(2, 10);
+let connections   = [];
+let myId          = '';
+let hostId        = '';
+let currentUser   = { name: '', role: '' };
 let violationsData = [];
-let isHost = false;
+let isHost        = false;
+let currentBrokerIdx = 0;
+let toastTimer    = null;
 
-// --- DISPLAY SETTINGS STATE ---
-let displaySettings = {
-    time: true,
-    name: true,
-    class: true,
-    reporter: true
+// Display settings
+let displaySettings = { time: true, name: true, class: true, reporter: true };
+
+// ============================================================
+//  TOAST – Premium notification
+// ============================================================
+const TOAST_ICONS = {
+    info:    { icon: 'fa-circle-info',      color: 'text-blue-400',   bar: 'bg-blue-500',    cls: 'toast-info' },
+    success: { icon: 'fa-circle-check',     color: 'text-green-400',  bar: 'bg-green-500',   cls: 'toast-success' },
+    error:   { icon: 'fa-circle-xmark',     color: 'text-red-400',    bar: 'bg-red-500',     cls: 'toast-error' },
+    warning: { icon: 'fa-triangle-exclamation', color: 'text-yellow-400', bar: 'bg-yellow-500', cls: 'toast-warning' }
 };
 
-// --- UI UTILS ---
-function showToast(title, message, type = 'info') {
-    const t = document.getElementById('toast');
-    document.getElementById('toast-title').textContent = title;
-    document.getElementById('toast-message').textContent = message;
-    t.className = `fixed top-4 right-4 bg-gray-800 border-l-4 ${type === 'error' ? 'border-red-500' : 'border-blue-500'} text-white p-4 rounded shadow-2xl transform transition-transform duration-300 z-[100] max-w-sm flex items-start gap-3`;
-    t.classList.remove('translate-x-full');
-    setTimeout(() => t.classList.add('translate-x-full'), 3000);
+function showToast(title, message, type = 'info', duration = 3500) {
+    const t       = document.getElementById('toast');
+    const iconEl  = document.getElementById('toast-icon');
+    const titleEl = document.getElementById('toast-title');
+    const msgEl   = document.getElementById('toast-message');
+    const barEl   = document.getElementById('toast-progress');
+
+    const cfg = TOAST_ICONS[type] || TOAST_ICONS.info;
+
+    // Update content
+    titleEl.textContent = title;
+    msgEl.textContent   = message;
+    iconEl.className    = `${cfg.color} mt-0.5 text-sm shrink-0`;
+    iconEl.innerHTML    = `<i class="fa-solid ${cfg.icon}"></i>`;
+
+    // Update bar color
+    barEl.className = `toast-progress ${cfg.bar}`;
+
+    // Reset animation tricks
+    t.className = `${cfg.cls}`;
+    barEl.style.animation = 'none';
+    barEl.offsetHeight; // reflow
+    barEl.style.animation = `toastProgress ${duration}ms linear forwards`;
+
+    // Show
+    requestAnimationFrame(() => t.classList.add('show'));
+
+    // Auto-hide
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
+// ============================================================
+//  UI UTILITIES
+// ============================================================
 function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
-    document.getElementById('form-create').classList.add('hidden');
-    document.getElementById('form-join').classList.add('hidden');
-    document.getElementById(`form-${tab}`).classList.remove('hidden');
+    ['create', 'join'].forEach(t => {
+        document.getElementById(`form-${t}`).classList.toggle('d-none', t !== tab);
+    });
 }
 
 function togglePasswordInput() {
-    const role = document.getElementById('join-role').value;
-    const passField = document.getElementById('password-field');
-    const guestNameField = document.getElementById('guest-name-field');
+    const role          = document.getElementById('join-role').value;
+    const passField     = document.getElementById('password-field');
+    const guestField    = document.getElementById('guest-name-field');
 
-    // Luôn hiện ô nhập tên người trực
-    guestNameField.classList.remove('hidden');
-
-    // BUG FIX: Kiểm tra xem role có trong danh sách mật khẩu không, thay vì chỉ check 12A
-    if (CLASS_PASSWORDS.hasOwnProperty(role)) {
-        passField.classList.remove('hidden');
-    } else {
-        passField.classList.add('hidden');
-    }
+    guestField.classList.toggle('d-none', !role);
+    passField.classList.toggle('d-none', !CLASS_PASSWORDS.hasOwnProperty(role));
 }
 
-function updateStatus(status, color = 'green') {
+function updateStatus(statusText, color = 'green') {
     const text = document.getElementById('connection-status-text');
-    const dot = document.getElementById('connection-status-dot');
-    text.textContent = status;
-    dot.className = `w-2 h-2 rounded-full ${color === 'green' ? 'bg-green-500' : color === 'red' ? 'bg-red-500' : 'bg-yellow-500'} ${color === 'yellow' ? 'animate-pulse' : ''}`;
+    const dot  = document.getElementById('connection-status-dot');
+    text.textContent = statusText;
+    dot.className = `status-dot ${color === 'green' ? 'online' : color === 'red' ? 'offline' : 'pending'}`;
 }
 
 function switchToMainApp(pin) {
-    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('login-screen').classList.add('d-none');
     const app = document.getElementById('main-app');
-    app.classList.remove('hidden');
-    setTimeout(() => app.classList.remove('opacity-0'), 100);
+    app.classList.remove('d-none');
+    app.classList.remove('app-hidden');
+    requestAnimationFrame(() => setTimeout(() => app.classList.add('app-visible'), 50));
 
-    document.getElementById('display-name').textContent = currentUser.name || currentUser.role;
-    document.getElementById('display-role').textContent = currentUser.role;
+    const nameEl = document.getElementById('display-name');
+    const roleEl = document.getElementById('display-role');
+
+    nameEl.textContent = currentUser.name || currentUser.role;
+    roleEl.textContent = currentUser.role;
+    roleEl.className = 'role-badge role-badge-host';
+
+    // Adjust role badge for non-host
+    if (currentUser.role !== 'HOST') {
+        roleEl.style.background = 'linear-gradient(135deg, #059669, #047857)';
+        roleEl.style.boxShadow = '0 2px 8px rgba(5, 150, 105, 0.4)';
+    }
 
     if (pin) {
         document.getElementById('display-pin').textContent = pin;
-        document.getElementById('pin-container').classList.remove('hidden');
-    }
-    if (currentUser.role === 'HOST') {
-        document.getElementById('clear-all-btn').classList.remove('hidden');
-        document.getElementById('connected-users-bubble').classList.remove('hidden'); // Show bubble for Host
+        document.getElementById('pin-container').classList.remove('d-none');
     }
 
-    // Populate datalist for edit modal
+    if (currentUser.role === 'HOST') {
+        document.getElementById('clear-all-btn').classList.remove('d-none');
+        document.getElementById('connected-users-bubble').classList.remove('d-none');
+    }
+
+    // Populate datalist
     const dataList = document.getElementById('violation-suggestions');
     if (dataList) {
-        dataList.innerHTML = '';
-        Object.values(VIOLATION_MAP).forEach(v => {
-            const opt = document.createElement('option');
-            opt.value = v.label;
-            dataList.appendChild(opt);
-        });
+        dataList.innerHTML = Object.values(VIOLATION_MAP)
+            .map(v => `<option value="${v.label}">`)
+            .join('');
     }
 
-    // Tự động kiểm tra thiết bị để set toggle Enter
-    const isMobile = window.innerWidth <= 768;
-    const enterToggle = document.getElementById('enter-to-send');
-    if (enterToggle) enterToggle.checked = !isMobile;
+    // Auto set Enter-to-send
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const toggle = document.getElementById('enter-to-send');
+    if (toggle) toggle.checked = !isMobile;
 }
 
 function copyPin() {
     const pin = document.getElementById('display-pin').textContent;
-    navigator.clipboard.writeText(pin);
-    showToast('Đã copy', 'Đã sao chép mã phòng');
+    navigator.clipboard.writeText(pin).then(() => {
+        showToast('Đã sao chép!', `Mã phòng ${pin} đã được copy`, 'success', 2000);
+    }).catch(() => {
+        showToast('Lỗi', 'Không thể copy tự động', 'error');
+    });
 }
 
 function logout() {
-    if (confirm('Bạn có chắc muốn thoát? Kết nối sẽ bị ngắt và dữ liệu phiên làm việc sẽ bị xóa.')) {
-        if (mqttClient) mqttClient.end();
-
-        // Xóa sạch dữ liệu lưu trữ
+    if (confirm('Bạn có chắc muốn thoát?\nKết nối sẽ bị ngắt và phiên làm việc sẽ bị xóa.')) {
+        if (mqttClient) mqttClient.end(true);
         localStorage.removeItem(CLIENT_SESSION_KEY);
         localStorage.removeItem(HOST_SESSION_KEY);
         localStorage.removeItem(HOST_DATA_KEY);
-
         location.reload();
     }
 }
 
-// --- HOST UI LOGIC (BUBBLE) ---
+// ============================================================
+//  HOST BUBBLE — Connected users
+// ============================================================
 function toggleUserList() {
-    const popover = document.getElementById('user-list-popover');
-    popover.classList.toggle('hidden');
+    const pop = document.getElementById('user-list-popover');
+    pop.classList.toggle('d-none');
 }
 
 function updateUserListUI() {
-    const badge = document.getElementById('user-count-badge');
+    const badge  = document.getElementById('user-count-badge');
     const listUl = document.getElementById('user-list-ul');
-
     badge.textContent = connections.length;
 
     if (connections.length === 0) {
-        listUl.innerHTML = '<li class="text-gray-500 text-xs text-center p-2 italic">Chưa có ai kết nối...</li>';
+        listUl.innerHTML = '<li class="text-slate-500 text-xs text-center py-4 italic">Chưa có máy nào kết nối...</li>';
         return;
     }
 
-    let html = '';
-    connections.forEach(conn => {
+    listUl.innerHTML = connections.map(conn => {
         const meta = conn.metadata || { name: 'Không tên', role: '?' };
-        // Icon based on role
-        let icon = 'fa-user';
-        let colorClass = 'text-gray-400';
-
-        // BUG FIX: Mở rộng kiểm tra icon cho cả khối 11 và 12
-        if (meta.role.startsWith('12') || meta.role.startsWith('11')) { icon = 'fa-users'; colorClass = 'text-blue-400'; }
+        let icon = 'fa-user', colorClass = 'text-slate-400';
+        if (/^\d{2}[A-Z]\d*$/.test(meta.role)) { icon = 'fa-users'; colorClass = 'text-blue-400'; }
         else if (meta.role === 'MONITOR') { icon = 'fa-user-shield'; colorClass = 'text-green-400'; }
-
-        html += `
-        <li class="flex items-center justify-between p-2 bg-gray-800 rounded border border-gray-700 hover:bg-gray-700 transition-colors">
-            <div class="flex items-center gap-2 overflow-hidden">
-                <div class="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center shrink-0 border border-gray-600">
-                    <i class="fa-solid ${icon} ${colorClass} text-xs"></i>
+        return `
+        <li class="user-list-item">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+                <div class="user-avatar ${colorClass}">
+                    <i class="fa-solid ${icon} text-xs"></i>
                 </div>
                 <div class="min-w-0">
-                    <p class="text-xs font-bold text-gray-200 truncate">${meta.name}</p>
-                    <p class="text-[10px] text-gray-400 font-mono">${meta.role}</p>
+                    <p class="text-xs font-bold text-slate-200 truncate">${escapeHtml(meta.name)}</p>
+                    <p class="text-[10px] font-mono text-slate-500">${escapeHtml(meta.role)}</p>
                 </div>
             </div>
-            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" title="Online"></span>
+            <span class="status-dot online shrink-0" title="Online"></span>
         </li>`;
-    });
-    listUl.innerHTML = html;
+    }).join('');
 }
 
-// --- P2P LOGIC ---
-
-// 1. CREATE ROOM (HOST)
+// ============================================================
+//  MQTT / P2P LOGIC
+// ============================================================
 function createRoom() {
     const name = document.getElementById('host-name').value.trim();
-    if (!name) return showToast('Lỗi', 'Vui lòng chọn tên giám thị (Lớp trưởng)', 'error');
+    if (!name) return showToast('Thiếu thông tin', 'Vui lòng chọn danh tính giám thị', 'error');
 
-    currentUser = { name: name, role: 'HOST' };
+    currentUser = { name, role: 'HOST' };
     isHost = true;
 
-    const randomPin = Math.floor(100000 + Math.random() * 900000);
-    myId = `GT-${randomPin}`;
-    hostId = myId;
-    roomTopic = `giamthi_room_${randomPin}`;
+    const pin = Math.floor(100000 + Math.random() * 900000);
+    myId = hostId = `GT-${pin}`;
+    roomTopic = `giamthi_room_${pin}`;
 
-    // LƯU PHIÊN HOST VÀO LOCALSTORAGE
-    localStorage.setItem(HOST_SESSION_KEY, JSON.stringify({
-        name: name,
-        role: 'HOST',
-        pin: randomPin
-    }));
-
+    localStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ name, role: 'HOST', pin }));
     initMQTT(true);
 }
 
-// 2. JOIN ROOM (CLIENT)
 function joinRoom() {
-    const pin = document.getElementById('join-pin').value.trim();
-    const role = document.getElementById('join-role').value;
+    const pin       = document.getElementById('join-pin').value.trim();
+    const role      = document.getElementById('join-role').value;
     const inputName = document.getElementById('guest-name').value.trim();
 
-    if (!pin || pin.length !== 6) return showToast('Lỗi', 'Mã PIN gồm 6 số', 'error');
-    if (!role) return showToast('Lỗi', 'Chọn vai trò', 'error');
-    if (!inputName) return showToast('Lỗi', 'Vui lòng nhập tên người trực', 'error');
+    if (!pin || pin.length !== 6) return showToast('Lỗi mã phòng', 'Mã phòng phải gồm đúng 6 chữ số', 'error');
+    if (!role) return showToast('Thiếu vai trò', 'Vui lòng chọn lớp / vai trò', 'error');
+    if (!inputName) return showToast('Thiếu tên', 'Vui lòng nhập tên người trực', 'error');
 
-    let finalName = inputName;
-
-    // Password check for classes
     if (CLASS_PASSWORDS.hasOwnProperty(role)) {
         const pass = document.getElementById('join-password').value;
-        if (pass !== CLASS_PASSWORDS[role]) return showToast('Lỗi', 'Sai mật khẩu lớp!', 'error');
+        if (pass !== CLASS_PASSWORDS[role])
+            return showToast('Sai mật khẩu', 'Mật khẩu lớp không đúng!', 'error');
     }
 
-    currentUser = { name: finalName, role: role };
+    currentUser = { name: inputName, role };
     isHost = false;
     hostId = `GT-${pin}`;
     roomTopic = `giamthi_room_${pin}`;
 
-    // LƯU PHIÊN KHÁCH VÀO LOCALSTORAGE
-    localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({
-        pin: pin,
-        name: finalName,
-        role: role
-    }));
-
+    localStorage.setItem(CLIENT_SESSION_KEY, JSON.stringify({ pin, name: inputName, role }));
     initMQTT(false);
 }
 
-function initMQTT(isHostInit) {
-    showToast('Hệ thống', 'Đang kết nối Cloud Server (MQTT)...');
+function initMQTT(isHostInit, brokerIdx = 0) {
+    if (brokerIdx >= MQTT_BROKERS.length) {
+        showToast('Lỗi nghiêm trọng', 'Không thể kết nối bất kỳ máy chủ MQTT nào', 'error');
+        updateStatus('Lỗi kết nối', 'red');
+        return;
+    }
 
-    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    const brokerUrl = MQTT_BROKERS[brokerIdx];
+    showToast('Đang kết nối', `Server MQTT (${brokerIdx + 1}/${MQTT_BROKERS.length})...`, 'info', 5000);
+    updateStatus('Đang kết nối...', 'yellow');
 
-    // Client disconnect will
-    const opts = !isHostInit ? {
-        will: {
-            topic: `${roomTopic}/client_to_host`,
-            payload: JSON.stringify({ type: 'BYE', clientId: myClientId }),
-            qos: 0,
-            retain: false
-        }
-    } : {};
+    const opts = {
+        clientId: `giamthi_${myClientId}`,
+        keepalive: 60,
+        connectTimeout: 10000,
+        reconnectPeriod: 0, // disable auto-reconnect, we handle manually
+        ...(!isHostInit ? {
+            will: {
+                topic: `${roomTopic}/client_to_host`,
+                payload: JSON.stringify({ type: 'BYE', clientId: myClientId }),
+                qos: 0,
+                retain: false
+            }
+        } : {})
+    };
 
+    if (mqttClient) { try { mqttClient.end(true); } catch(e) {} }
     mqttClient = mqtt.connect(brokerUrl, opts);
 
+    // Connection timeout
+    const connTimeout = setTimeout(() => {
+        if (mqttClient && !mqttClient.connected) {
+            mqttClient.end(true);
+            showToast('Hết thời gian', 'Thử broker dự phòng...', 'warning');
+            initMQTT(isHostInit, brokerIdx + 1);
+        }
+    }, 10000);
+
     mqttClient.on('connect', () => {
+        clearTimeout(connTimeout);
+        currentBrokerIdx = brokerIdx;
+
         if (isHostInit) {
-            // Host Setup
             const pin = hostId.replace('GT-', '');
             switchToMainApp(pin);
-            updateStatus(`Máy chủ đang chạy`, 'green');
+            updateStatus('Máy chủ đang hoạt động', 'green');
             loadDataLocal();
             renderReport();
             updateUserListUI();
-
-            mqttClient.subscribe(`${roomTopic}/client_to_host`);
+            mqttClient.subscribe(`${roomTopic}/client_to_host`, { qos: 0 });
+            showToast('Phòng đã mở!', `Mã phòng: ${pin} — Chia sẻ cho các lớp`, 'success');
         } else {
-            // Client Setup
             switchToMainApp();
             updateStatus('Đang đồng bộ...', 'yellow');
+            mqttClient.subscribe(`${roomTopic}/host_to_client`, { qos: 0 });
+            mqttClient.subscribe(`${roomTopic}/host_to_client/${myClientId}`, { qos: 0 });
 
-            mqttClient.subscribe(`${roomTopic}/host_to_client`);
-            mqttClient.subscribe(`${roomTopic}/host_to_client/${myClientId}`);
-
-            // Say hello to host
-            mqttClient.publish(`${roomTopic}/client_to_host`, JSON.stringify({
+            // Handshake
+            publish(`${roomTopic}/client_to_host`, {
                 type: 'HELLO',
                 clientId: myClientId,
                 metadata: { name: currentUser.name, role: currentUser.role }
-            }));
+            });
         }
     });
 
@@ -286,358 +332,457 @@ function initMQTT(isHostInit) {
         try {
             const payload = JSON.parse(message.toString());
             if (isHostInit && topic === `${roomTopic}/client_to_host`) {
-                if (payload.type === 'HELLO') {
-                    if (!connections.find(c => c.id === payload.clientId)) {
-                        connections.push({ id: payload.clientId, metadata: payload.metadata });
-                        showToast('Kết nối mới', `${payload.metadata.name} (${payload.metadata.role}) đã vào phòng`);
-                        updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
-                        updateUserListUI();
-                    }
-                    mqttClient.publish(`${roomTopic}/host_to_client/${payload.clientId}`, JSON.stringify({
-                        type: 'SYNC_FULL',
-                        data: violationsData
-                    }));
-                } else if (payload.type === 'BYE') {
-                    connections = connections.filter(c => c.id !== payload.clientId);
-                    updateUserListUI();
-                    updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
-                } else {
-                    handleDataPacket(payload);
-                }
+                handleHostMessage(payload);
             } else if (!isHostInit && topic.startsWith(`${roomTopic}/host_to_client`)) {
-                if (payload.type === 'SYNC_FULL' && document.getElementById('connection-status-text').textContent.includes('đồng bộ')) {
-                    updateStatus('Đã kết nối với Giám Thị', 'green');
-                    showToast('Thành công', 'Đã vào phòng!');
-                }
-                handleDataPacket(payload);
+                handleClientMessage(payload);
             }
         } catch (e) {
-            console.error('Lỗi parse msg:', e);
+            console.warn('[MQTT] Lỗi parse message:', e);
         }
     });
 
     mqttClient.on('error', (err) => {
-        console.error('MQTT Error:', err);
-        updateStatus('Lỗi Server', 'red');
-        showToast('Lỗi', 'Không kết nối được server trung gian', 'error');
+        clearTimeout(connTimeout);
+        console.error('[MQTT] Error:', err);
+        updateStatus('Lỗi kết nối', 'red');
+        // Try next broker if not yet connected
+        if (brokerIdx < MQTT_BROKERS.length - 1) {
+            setTimeout(() => initMQTT(isHostInit, brokerIdx + 1), 1000);
+        }
     });
 
     mqttClient.on('close', () => {
-        // updateStatus('Mất kết nối', 'red');
+        // Only update status if we were connected before
+        if (document.getElementById('main-app') && !document.getElementById('main-app').classList.contains('hidden')) {
+            updateStatus('Mất kết nối – đang thử lại', 'red');
+        }
+    });
+
+    mqttClient.on('reconnect', () => {
+        updateStatus('Đang kết nối lại...', 'yellow');
     });
 }
 
-function broadcast(packet) {
-    if (mqttClient && mqttClient.connected) {
-        mqttClient.publish(`${roomTopic}/host_to_client`, JSON.stringify(packet));
+function handleHostMessage(payload) {
+    if (payload.type === 'HELLO') {
+        const existing = connections.findIndex(c => c.id === payload.clientId);
+        if (existing === -1) {
+            connections.push({ id: payload.clientId, metadata: payload.metadata });
+            showToast('Kết nối mới 🔗', `${payload.metadata.name} (${payload.metadata.role}) đã vào phòng`, 'success');
+            updateStatus(`Đã kết nối ${connections.length} máy`, 'green');
+            updateUserListUI();
+        }
+
+        // Send full sync to this specific client
+        publish(`${roomTopic}/host_to_client/${payload.clientId}`, {
+            type: 'SYNC_FULL',
+            data: violationsData
+        });
+    } else if (payload.type === 'BYE') {
+        const before = connections.length;
+        connections = connections.filter(c => c.id !== payload.clientId);
+        if (connections.length < before) {
+            updateUserListUI();
+            updateStatus(connections.length > 0 ? `Đã kết nối ${connections.length} máy` : 'Máy chủ đang chạy', 'green');
+        }
+    } else {
+        handleDataPacket(payload);
     }
 }
 
-// --- DATA HANDLING (BOTH) ---
+function handleClientMessage(payload) {
+    if (payload.type === 'SYNC_FULL') {
+        const statusText = document.getElementById('connection-status-text').textContent;
+        if (statusText.includes('đồng bộ') || statusText.includes('chờ')) {
+            updateStatus('Đã kết nối với Giám Thị', 'green');
+            showToast('Vào phòng thành công!', 'Dữ liệu đã được đồng bộ', 'success');
+        }
+    }
+    handleDataPacket(payload);
+}
+
+function publish(topic, data) {
+    if (mqttClient && mqttClient.connected) {
+        mqttClient.publish(topic, JSON.stringify(data), { qos: 0 });
+    }
+}
+
+function broadcast(packet) {
+    publish(`${roomTopic}/host_to_client`, packet);
+}
+
+// ============================================================
+//  DATA HANDLING
+// ============================================================
 function handleDataPacket(packet) {
-    if (packet.type === 'SYNC_FULL') {
-        violationsData = packet.data;
-        renderReport();
-        if (isHost) saveDataLocal();
-    } else if (packet.type === 'ADD_ITEMS') {
-        violationsData = [...violationsData, ...packet.items];
-        renderReport();
-        if (isHost) {
-            saveDataLocal();
-            broadcast({ type: 'SYNC_FULL', data: violationsData });
-        }
-    } else if (packet.type === 'REMOVE_ITEM') {
-        violationsData = violationsData.filter(v => v.id !== packet.id);
-        renderReport();
-        if (isHost) {
-            saveDataLocal();
-            broadcast({ type: 'SYNC_FULL', data: violationsData });
-        }
-    } else if (packet.type === 'UPDATE_ITEM') {
-        const index = violationsData.findIndex(v => v.id === packet.data.id);
-        if (index !== -1) {
-            violationsData[index] = { ...violationsData[index], ...packet.data };
+    switch (packet.type) {
+        case 'SYNC_FULL':
+            violationsData = Array.isArray(packet.data) ? packet.data : [];
             renderReport();
-            if (isHost) {
-                saveDataLocal();
-                broadcast({ type: 'SYNC_FULL', data: violationsData });
+            if (isHost) saveDataLocal();
+            break;
+        case 'ADD_ITEMS':
+            if (Array.isArray(packet.items)) {
+                violationsData = [...violationsData, ...packet.items];
+                renderReport();
+                if (isHost) { saveDataLocal(); broadcast({ type: 'SYNC_FULL', data: violationsData }); }
             }
+            break;
+        case 'REMOVE_ITEM':
+            violationsData = violationsData.filter(v => v.id !== packet.id);
+            renderReport();
+            if (isHost) { saveDataLocal(); broadcast({ type: 'SYNC_FULL', data: violationsData }); }
+            break;
+        case 'UPDATE_ITEM': {
+            const idx = violationsData.findIndex(v => v.id === packet.data.id);
+            if (idx !== -1) {
+                violationsData[idx] = { ...violationsData[idx], ...packet.data };
+                renderReport();
+                if (isHost) { saveDataLocal(); broadcast({ type: 'SYNC_FULL', data: violationsData }); }
+            }
+            break;
         }
-    } else if (packet.type === 'CLEAR_ALL') {
-        violationsData = [];
-        renderReport();
-        if (isHost) saveDataLocal();
+        case 'CLEAR_ALL':
+            violationsData = [];
+            renderReport();
+            if (isHost) saveDataLocal();
+            break;
     }
 }
 
 function sendData(packet) {
     if (isHost) {
         handleDataPacket(packet);
+    } else if (mqttClient && mqttClient.connected) {
+        publish(`${roomTopic}/client_to_host`, packet);
     } else {
-        if (mqttClient && mqttClient.connected) {
-            mqttClient.publish(`${roomTopic}/client_to_host`, JSON.stringify(packet));
-        } else {
-            showToast('Lỗi', 'Chưa kết nối Máy chủ', 'error');
+        showToast('Chưa kết nối', 'Vui lòng kết nối lại với máy chủ', 'error');
+    }
+}
+
+// ============================================================
+//  LOCAL STORAGE
+// ============================================================
+function saveDataLocal() {
+    if (isHost) {
+        try { localStorage.setItem(HOST_DATA_KEY, JSON.stringify(violationsData)); }
+        catch(e) { console.warn('Không thể lưu local storage:', e); }
+    }
+}
+
+function loadDataLocal() {
+    const saved = localStorage.getItem(HOST_DATA_KEY);
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) violationsData = parsed;
+        } catch(e) {
+            console.warn('Dữ liệu local storage bị hỏng, xóa...', e);
+            localStorage.removeItem(HOST_DATA_KEY);
         }
     }
 }
 
-// --- STORAGE (HOST ONLY) ---
-function saveDataLocal() {
-    if (isHost) localStorage.setItem(HOST_DATA_KEY, JSON.stringify(violationsData));
-}
-function loadDataLocal() {
-    const saved = localStorage.getItem(HOST_DATA_KEY);
-    if (saved) {
-        try { violationsData = JSON.parse(saved); } catch (e) { }
-    }
-}
+// ============================================================
+//  TEXT PROCESSING
+// ============================================================
+const toTitleCase = str =>
+    str.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase());
 
-// --- PROCESSING LOGIC ---
-const toTitleCase = str => str.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase());
-const removeAccents = str => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+const removeAccents = str =>
+    str.normalize('NFD')
+       .replace(/[\u0300-\u036f]/g, '')
+       .replace(/đ/g, 'd').replace(/Đ/g, 'D');
 
 const detectViolation = (text) => {
-    if (!text) return 'Chưa xác định';
+    if (!text || !text.trim()) return 'Chưa xác định';
     const normalized = removeAccents(text.toLowerCase()).trim();
+    
+    // Find the LONGEST matching key to avoid ambiguity
+    // e.g. "ao dai" (6 chars) should beat "ao" (2 chars)
+    let bestMatch = null;
+    let bestKeyLen = 0;
+    
     for (const code in VIOLATION_MAP) {
-        if (VIOLATION_MAP[code].keys.some(key => normalized.includes(key))) return VIOLATION_MAP[code].label;
+        for (const key of VIOLATION_MAP[code].keys) {
+            if (normalized.includes(key) && key.length > bestKeyLen) {
+                bestKeyLen = key.length;
+                bestMatch = VIOLATION_MAP[code].label;
+            }
+        }
     }
-    return toTitleCase(text);
+    
+    return bestMatch || toTitleCase(text.trim());
 };
 
-const smartParse = (rawText) => {
-    const lines = rawText.split(/\n+/);
-    const results = [];
-    // BUG FIX: Regex is fine, but ensuring it captures newer classes if format changes
-    const classRegex = /\b([1-9][0-2]?[a-zA-Z][0-9]{0,2})\b/;
-    const now = new Date().toISOString();
+// Regex nhận diện tên lớp (10A1, 11B2, 12A3, v.v.)
+const CLASS_REGEX = /\b([1-9][0-2]?[a-zA-Z][0-9]{0,2})\b/i;
 
-    lines.forEach(line => {
+const smartParse = (rawText) => {
+    const lines   = rawText.split(/\n+/);
+    const results = [];
+    const now     = new Date().toISOString();
+
+    lines.forEach((line, lineIdx) => {
         line = line.trim().replace(/\s+/g, ' ');
         if (!line) return;
+
         let name = '', className = '', violation = '';
-        const classMatch = line.match(classRegex);
+        const classMatch = line.match(CLASS_REGEX);
 
         if (classMatch) {
             className = classMatch[0].toUpperCase();
-            name = line.substring(0, classMatch.index).replace(/[-–]/g, '').trim();
-            violation = line.substring(classMatch.index + className.length).replace(/[-–]/g, '').trim();
+            const pre  = line.substring(0, classMatch.index).replace(/[-–]/g, '').trim();
+            const post = line.substring(classMatch.index + classMatch[0].length).replace(/^[-–\s]+/, '').trim();
 
-            // Xử lý trường hợp người dùng gõ Lớp lên đầu: "12A1 Nguyễn Văn A đi muộn"
-            if (!name && violation) {
-                let rest = violation;
-                // Chỉ dùng dấu gạch ngang/chấm phẩy để tách tên - KHÔNG dùng dấu phẩy
-                // vì dấu phẩy được dùng để phân cách đa vi phạm
-                const dashParts = rest.split(/[-–;]/);
+            if (pre) {
+                // Format: "Nguyễn Văn A 12A1 đi muộn"
+                name      = pre;
+                violation = post;
+            } else {
+                // Format: "12A1 Nguyễn Văn A - đi muộn" or "12A1 đi muộn Nguyễn Văn A"
+                const dashParts = post.split(/[-–;]/);
                 if (dashParts.length >= 2) {
-                    name = dashParts[0].trim();
-                    // Giữ toàn bộ phần còn lại (có thể có nhiều vi phạm cách nhau bởi phẩy)
+                    name      = dashParts[0].trim();
                     violation = dashParts.slice(1).join(',').trim();
                 } else {
-                    // Dùng keyword detection để tìm ranh giới tên/vi phạm
-                    let matchedKey = '';
-                    let matchedIdx = Infinity;
-                    const normalizedRest = removeAccents(rest.toLowerCase());
+                    // Keyword search to separate name / violation
+                    // Prefer: earliest position first, then longest key at that position
+                    const normalizedPost = removeAccents(post.toLowerCase());
+                    let bestKeyIdx = Infinity, bestKeyLen = 0, bestKey = '';
                     for (const code in VIOLATION_MAP) {
                         for (const key of VIOLATION_MAP[code].keys) {
-                            const idx = normalizedRest.indexOf(key);
-                            if (idx !== -1 && idx < matchedIdx) {
-                                matchedIdx = idx;
-                                matchedKey = key;
+                            const idx = normalizedPost.indexOf(key);
+                            if (idx !== -1 && (idx < bestKeyIdx || (idx === bestKeyIdx && key.length > bestKeyLen))) {
+                                bestKeyIdx = idx; bestKeyLen = key.length; bestKey = key;
                             }
                         }
                     }
-                    if (matchedKey && matchedIdx > 0) {
-                        name = rest.substring(0, matchedIdx).trim();
-                        // Giữ toàn bộ phần violation từ vị trí keyword trở đi
-                        violation = rest.substring(matchedIdx).trim();
-                    } else if (matchedKey && matchedIdx === 0) {
-                        name = rest;
-                        violation = '';
+                    if (bestKey && bestKeyIdx > 0) {
+                        name      = post.substring(0, bestKeyIdx).trim();
+                        violation = post.substring(bestKeyIdx).trim();
+                    } else if (bestKey && bestKeyIdx === 0) {
+                        name = post; violation = '';
                     } else {
-                        name = rest;
-                        violation = 'Chưa xác định';
+                        name = post; violation = 'Chưa xác định';
                     }
                 }
             }
         } else {
             const parts = line.split(/[-–,;]/);
             if (parts.length >= 2) {
-                name = parts[0].trim();
+                name      = parts[0].trim();
                 violation = parts[parts.length - 1].trim();
                 if (parts.length > 2) className = parts[1].trim().toUpperCase();
             } else {
-                name = line;
-                violation = 'Chưa xác định';
+                name = line; violation = 'Chưa xác định';
             }
         }
 
-        if (name) {
-            // Hỗ trợ đa vi phạm: tách violation theo dấu phẩy
-            const violationParts = violation
-                ? violation.split(',').map(v => v.trim()).filter(v => v.length > 0)
-                : ['Chưa xác định'];
+        if (!name) return;
 
-            violationParts.forEach(vPart => {
-                results.push({
-                    id: Date.now() + Math.random().toString(),
-                    name: toTitleCase(name),
-                    class: className || '?',
-                    violation: detectViolation(vPart),
-                    time: now,
-                    reporter: currentUser.name
-                });
+        // Handle multiple violations separated by comma
+        const vParts = violation
+            ? violation.split(',').map(v => v.trim()).filter(v => v.length > 0)
+            : ['Chưa xác định'];
+
+        vParts.forEach(vp => {
+            results.push({
+                id:        `${Date.now()}_${lineIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                name:      toTitleCase(name),
+                class:     className || '?',
+                violation: detectViolation(vp),
+                time:      now,
+                reporter:  currentUser.name
             });
-        }
+        });
     });
+
     return results;
 };
+
+// ============================================================
+//  RENDER REPORT
+// ============================================================
+const escapeHtml = str => String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 const renderReport = () => {
     const container = document.getElementById('report-container');
     document.getElementById('count-badge').textContent = violationsData.length;
 
     if (violationsData.length === 0) {
-        container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60"><i class="fa-solid fa-clipboard-check text-6xl mb-4"></i><p>Không tìm thấy vi phạm nào</p></div>`;
+        container.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="fa-solid fa-clipboard-check text-blue-400/20"></i></div>
+            <p class="text-sm font-semibold text-slate-500">Chưa có vi phạm nào</p>
+            <p class="text-xs text-slate-600">Hãy nhập dữ liệu ở bên trái để bắt đầu</p>
+        </div>`;
         return;
     }
 
-    const groupedData = {};
+    // Group by violation type
+    const grouped = {};
     violationsData.forEach(s => {
-        const v = s.violation || 'Lỗi khác';
-        if (!groupedData[v]) groupedData[v] = [];
-        groupedData[v].push(s);
+        const key = s.violation || 'Lỗi khác';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(s);
     });
 
+    // Sort groups by count descending
+    const sortedGroups = Object.entries(grouped).sort((a, b) => b[1].length - a[1].length);
+
     let html = '';
-    let sttTotal = 1;
+    let stt = 1;
 
-    for (const [vName, students] of Object.entries(groupedData)) {
-        html += `
-        <div class="mb-6 animate-fade-in">
-            <div class="bg-gray-700/50 backdrop-blur-sm p-3 rounded-t-lg border-b border-gray-600 flex justify-between items-center sticky top-0 z-10">
-                <h4 class="font-bold text-blue-400 uppercase text-sm flex items-center gap-2"><i class="fa-solid fa-circle-exclamation"></i>${vName}</h4>
-                <span class="bg-blue-900/50 text-blue-200 text-xs px-2 py-1 rounded-full font-mono">${students.length}</span>
-            </div>
-            <table class="w-full text-left border-collapse bg-gray-800/40 rounded-b-lg overflow-hidden">
-                <thead class="bg-gray-800/60 text-xs uppercase text-gray-400">
-                    <tr>
-                        <th class="p-3 w-10 text-center">#</th>
-                        ${displaySettings.time ? '<th class="p-3 w-16 text-center">Giờ</th>' : ''}
-                        ${displaySettings.name ? '<th class="p-3">Họ và Tên</th>' : ''}
-                        ${displaySettings.class ? '<th class="p-3 w-20 text-center">Lớp</th>' : ''}
-                        ${displaySettings.reporter ? '<th class="p-3 w-20 text-right text-[10px]">Người báo</th>' : ''}
-                        <th class="p-3 w-20 text-center">Tác vụ</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-700/50">`;
+    for (const [vName, students] of sortedGroups) {
+        const thead = `
+        <thead>
+            <tr class="bg-black/10">
+                <th class="violation-table-th w-10 text-center">#</th>
+                ${displaySettings.time     ? '<th class="violation-table-th w-16 text-center">Giờ</th>' : ''}
+                ${displaySettings.name     ? '<th class="violation-table-th">Họ và Tên</th>' : ''}
+                ${displaySettings.class    ? '<th class="violation-table-th w-20 text-center">Lớp</th>' : ''}
+                ${displaySettings.reporter ? '<th class="violation-table-th w-24 text-right">Người báo</th>' : ''}
+                <th class="violation-table-th w-16 text-center">Thao tác</th>
+            </tr>
+        </thead>`;
 
+        let tbody = '<tbody>';
         students.forEach(s => {
             const timeStr = new Date(s.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-            html += `
-            <tr class="hover:bg-gray-700/30 transition-colors group">
-                <td class="p-3 text-gray-500 font-mono text-sm text-center">${sttTotal++}</td>
-                ${displaySettings.time ? `<td class="p-3 text-gray-400 font-mono text-sm text-center">${timeStr}</td>` : ''}
-                ${displaySettings.name ? `<td class="p-3 font-medium text-gray-200">${s.name}</td>` : ''}
-                ${displaySettings.class ? `<td class="p-3 text-center"><span class="bg-gray-700 text-yellow-400 px-2 py-1 rounded text-xs font-bold font-mono border border-gray-600">${s.class}</span></td>` : ''}
-                ${displaySettings.reporter ? `<td class="p-3 text-right text-gray-500 text-[10px] italic">${s.reporter || ''}</td>` : ''}
-                <td class="p-3 text-center">
-                    <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onclick="openEditModal('${s.id}')" class="text-gray-400 hover:text-yellow-400 transition-colors p-1" title="Sửa">
-                            <i class="fa-solid fa-pen"></i>
+            tbody += `
+            <tr class="violation-table-row">
+                <td class="td-cell stt-cell">${stt++}</td>
+                ${displaySettings.time     ? `<td class="td-cell time-cell text-center">${escapeHtml(timeStr)}</td>` : ''}
+                ${displaySettings.name     ? `<td class="td-cell"><span class="student-name">${escapeHtml(s.name)}</span></td>` : ''}
+                ${displaySettings.class    ? `<td class="td-cell text-center"><span class="class-badge">${escapeHtml(s.class)}</span></td>` : ''}
+                ${displaySettings.reporter ? `<td class="td-cell reporter-cell text-right">${escapeHtml(s.reporter || '')}</td>` : ''}
+                <td class="td-cell">
+                    <div class="row-actions">
+                        <button class="action-btn action-btn-edit" onclick="openEditModal('${escapeHtml(s.id)}')" title="Chỉnh sửa">
+                            <i class="fa-solid fa-pen text-[10px]"></i>
                         </button>
-                        <button onclick="deleteRow('${s.id}')" class="text-gray-400 hover:text-red-400 transition-colors p-1" title="Xóa">
-                            <i class="fa-solid fa-trash-can"></i>
+                        <button class="action-btn action-btn-delete" onclick="deleteRow('${escapeHtml(s.id)}')" title="Xóa">
+                            <i class="fa-solid fa-trash text-[10px]"></i>
                         </button>
                     </div>
                 </td>
             </tr>`;
         });
-        html += `</tbody></table></div>`;
+        tbody += '</tbody>';
+
+        html += `
+        <div class="violation-group">
+            <div class="violation-group-header">
+                <div class="violation-group-title">
+                    <i class="fa-solid fa-circle-exclamation text-[10px]"></i>
+                    ${escapeHtml(vName)}
+                </div>
+                <span class="group-count-badge">${students.length} HS</span>
+            </div>
+            <table class="violation-table">${thead}${tbody}</table>
+        </div>`;
     }
+
     container.innerHTML = html;
+
+    // Additional inline styles for table cells (since we're not using tailwind here)
+    container.querySelectorAll('.td-cell').forEach(td => {
+        td.style.padding = '10px 14px';
+        td.style.verticalAlign = 'middle';
+        td.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
+    });
+    container.querySelectorAll('.violation-table-th').forEach(th => {
+        th.style.padding = '10px 14px';
+        th.style.fontSize = '10px';
+        th.style.fontWeight = '700';
+        th.style.letterSpacing = '0.08em';
+        th.style.textTransform = 'uppercase';
+        th.style.color = '#475569';
+        th.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+    });
+    container.querySelectorAll('.violation-table-row').forEach(tr => {
+        tr.classList.add('violation-table-row-hover');
+    });
 };
 
-// --- EDIT LOGIC ---
+// ============================================================
+//  EDIT MODAL
+// ============================================================
 window.openEditModal = (id) => {
     const item = violationsData.find(v => v.id === id);
-    if (!item) return;
+    if (!item) return showToast('Lỗi', 'Không tìm thấy dòng dữ liệu', 'error');
 
-    document.getElementById('edit-id').value = id;
-    document.getElementById('edit-name').value = item.name;
-    document.getElementById('edit-class').value = item.class;
+    document.getElementById('edit-id').value        = id;
+    document.getElementById('edit-name').value      = item.name;
+    document.getElementById('edit-class').value     = item.class;
     document.getElementById('edit-violation').value = item.violation;
 
-    document.getElementById('edit-modal').classList.remove('hidden');
+    document.getElementById('edit-modal').classList.remove('d-none');
 };
 
 window.closeEditModal = () => {
-    document.getElementById('edit-modal').classList.add('hidden');
+    document.getElementById('edit-modal').classList.add('d-none');
 };
 
 window.saveEdit = () => {
-    const id = document.getElementById('edit-id').value;
-    const name = document.getElementById('edit-name').value.trim();
+    const id        = document.getElementById('edit-id').value;
+    const name      = document.getElementById('edit-name').value.trim();
     const className = document.getElementById('edit-class').value.trim().toUpperCase();
     const violation = document.getElementById('edit-violation').value.trim();
 
-    if (!name || !className || !violation) {
-        showToast('Lỗi', 'Vui lòng điền đầy đủ thông tin', 'error');
-        return;
-    }
+    if (!name || !className || !violation)
+        return showToast('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường', 'error');
 
-    sendData({
-        type: 'UPDATE_ITEM',
-        data: { id, name, class: className, violation: detectViolation(violation) }
-    });
-
+    sendData({ type: 'UPDATE_ITEM', data: { id, name, class: className, violation: detectViolation(violation) } });
     closeEditModal();
-    showToast('Thành công', 'Đã cập nhật báo cáo');
+    showToast('Đã cập nhật', 'Thông tin vi phạm đã được sửa', 'success', 2500);
 };
 
 window.deleteRow = (id) => {
-    if (confirm('Bạn có chắc muốn xóa lỗi này?')) {
-        sendData({ type: 'REMOVE_ITEM', id: id });
+    if (confirm('Bạn có chắc muốn xóa vi phạm này?')) {
+        sendData({ type: 'REMOVE_ITEM', id });
+        showToast('Đã xóa', 'Vi phạm đã được loại khỏi danh sách', 'warning', 2500);
     }
 };
 
-document.getElementById('clear-all-btn').addEventListener('click', () => {
-    if (confirm('Xóa TẤT CẢ dữ liệu trên các máy?')) {
-        sendData({ type: 'CLEAR_ALL' });
-        if (isHost) {
-            violationsData = [];
-            renderReport();
-            saveDataLocal();
-            broadcast({ type: 'CLEAR_ALL' });
-        }
-    }
-});
-
-// --- DISPLAY SETTINGS ---
+// ============================================================
+//  DISPLAY SETTINGS TOGGLE
+// ============================================================
 function toggleDisplayMenu() {
-    document.getElementById('display-menu').classList.toggle('hidden');
+    document.getElementById('display-menu').classList.toggle('d-none');
 }
 
 document.addEventListener('click', (e) => {
     const menu = document.getElementById('display-menu');
-    const btn = document.getElementById('toggle-display-btn');
-    if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.classList.add('hidden');
+    const btn  = document.getElementById('toggle-display-btn');
+    if (menu && !menu.classList.contains('d-none') && !menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.classList.add('d-none');
+    }
+    // Close user list popover if clicking outside
+    const popover     = document.getElementById('user-list-popover');
+    const bubbleBtn   = document.getElementById('toggle-user-list-btn');
+    if (popover && !popover.classList.contains('d-none') && !popover.contains(e.target) && bubbleBtn && !bubbleBtn.contains(e.target)) {
+        popover.classList.add('d-none');
     }
 });
 
 ['time', 'name', 'class', 'reporter'].forEach(key => {
     const el = document.getElementById(`show-${key}`);
-    if (el) {
-        el.addEventListener('change', (e) => {
-            displaySettings[key] = e.target.checked;
-            renderReport();
-        });
-    }
+    if (el) el.addEventListener('change', e => {
+        displaySettings[key] = e.target.checked;
+        renderReport();
+    });
 });
 
-// --- EVENT LISTENERS ---
+// ============================================================
+//  EVENT LISTENERS — BUTTONS
+// ============================================================
 document.getElementById('btn-create-room').addEventListener('click', createRoom);
 document.getElementById('btn-join-room').addEventListener('click', joinRoom);
 document.getElementById('btn-logout').addEventListener('click', logout);
@@ -645,273 +790,399 @@ document.getElementById('toggle-user-list-btn').addEventListener('click', toggle
 document.getElementById('toggle-display-btn').addEventListener('click', toggleDisplayMenu);
 document.getElementById('join-role').addEventListener('change', togglePasswordInput);
 
+document.getElementById('clear-all-btn').addEventListener('click', () => {
+    if (confirm('Xóa TẤT CẢ dữ liệu trên mọi máy kết nối?\nHành động này không thể hoàn tác!')) {
+        violationsData = [];
+        renderReport();
+        saveDataLocal();
+        broadcast({ type: 'CLEAR_ALL' });
+        showToast('Đã xóa tất cả', 'Toàn bộ dữ liệu vi phạm đã được xóa', 'warning');
+    }
+});
+
+// ============================================================
+//  PROCESS INPUT
+// ============================================================
 document.getElementById('process-btn').addEventListener('click', () => {
     const input = document.getElementById('text-input');
-    if (!input.value.trim()) return showToast('Lỗi', 'Nhập dữ liệu!', 'error');
+    const raw   = input.value.trim();
+    if (!raw) return showToast('Chưa có dữ liệu', 'Hãy nhập nội dung vi phạm trước', 'error');
 
-    const newStudents = smartParse(input.value);
+    const newStudents = smartParse(raw);
     if (newStudents.length > 0) {
         sendData({ type: 'ADD_ITEMS', items: newStudents });
         input.value = '';
-        showToast('Gửi', `Đã gửi ${newStudents.length} lỗi`);
+        showToast('Đã gửi!', `${newStudents.length} vi phạm đã được thêm vào danh sách`, 'success');
     } else {
-        showToast('Thông tin', 'Không nhận dạng được', 'warning');
+        showToast('Không nhận dạng được', 'Hãy kiểm tra lại định dạng nhập', 'warning');
     }
 });
 
 document.getElementById('text-input').addEventListener('keydown', (e) => {
-    const enterToSend = document.getElementById('enter-to-send').checked;
-    if (enterToSend && e.key === 'Enter' && !e.shiftKey) {
+    if (document.getElementById('enter-to-send').checked && e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         document.getElementById('process-btn').click();
     }
 });
 
-// --- EXCEL IMPORT LOGIC (NEW) ---
-document.getElementById('excel-input').addEventListener('change', (e) => {
+// ============================================================
+//  EXCEL IMPORT
+// ============================================================
+document.getElementById('excel-input').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        // Đọc dữ liệu dạng mảng (header: 1)
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    reader.onload = (ev) => {
+        try {
+            const data     = new Uint8Array(ev.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const ws       = workbook.Sheets[workbook.SheetNames[0]];
+            const json     = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-        // Giả sử định dạng chuẩn: [STT, Time, Name, Class, Violation, Reporter]
-        const newItems = [];
-        const now = new Date().toISOString();
+            const now      = new Date().toISOString();
+            const newItems = [];
 
-        // Bắt đầu duyệt từ dòng 1 (bỏ qua header dòng 0)
-        for (let i = 1; i < json.length; i++) {
-            const row = json[i];
-            // Cần ít nhất tên (cột 2) và lỗi (cột 4)
-            if (row[2] && row[4]) {
+            // Skip header row (row 0)
+            for (let i = 1; i < json.length; i++) {
+                const row = json[i];
+                const nameVal = row[2] ? String(row[2]).trim() : '';
+                const vioVal  = row[4] ? String(row[4]).trim() : '';
+                if (!nameVal || !vioVal) continue;
+
                 newItems.push({
-                    id: Date.now() + Math.random().toString(),
-                    time: now, // Dùng thời gian hiện tại khi import
-                    name: row[2].toString().trim(),
-                    class: row[3] ? row[3].toString().trim().toUpperCase() : '?',
-                    violation: detectViolation(row[4].toString().trim()),
-                    reporter: row[5] ? row[5].toString().trim() : currentUser.name
+                    id:        `excel_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+                    time:      now,
+                    name:      nameVal,
+                    class:     row[3] ? String(row[3]).trim().toUpperCase() : '?',
+                    violation: detectViolation(vioVal),
+                    reporter:  row[5] ? String(row[5]).trim() : currentUser.name
                 });
             }
-        }
 
-        if (newItems.length > 0) {
-            sendData({ type: 'ADD_ITEMS', items: newItems });
-            showToast('Thành công', `Đã nhập ${newItems.length} dòng từ Excel`);
-        } else {
-            showToast('Lỗi', 'Không tìm thấy dữ liệu hợp lệ trong file', 'error');
+            if (newItems.length > 0) {
+                sendData({ type: 'ADD_ITEMS', items: newItems });
+                showToast('Import thành công', `Đã nhập ${newItems.length} dòng từ Excel`, 'success');
+            } else {
+                showToast('File rỗng', 'Không tìm thấy dữ liệu hợp lệ trong file (kiểm tra cột C và E)', 'error');
+            }
+        } catch(err) {
+            console.error('[Excel Import]', err);
+            showToast('Lỗi đọc file', 'File Excel bị hỏng hoặc sai định dạng', 'error');
+        } finally {
+            this.value = '';
         }
-
-        // Reset input để có thể chọn lại file cũ nếu muốn
-        document.getElementById('excel-input').value = '';
     };
     reader.readAsArrayBuffer(file);
 });
 
-// OCR Logic
-document.getElementById('ocr-input').addEventListener('change', async (e) => {
+// Drag & drop for Excel
+const dropZone = document.getElementById('excel-drop-zone');
+if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+            const input = document.getElementById('excel-input');
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change'));
+        } else {
+            showToast('Sai định dạng', 'Chỉ chấp nhận file .xlsx hoặc .xls', 'error');
+        }
+    });
+}
+
+// ============================================================
+//  OCR
+// ============================================================
+document.getElementById('ocr-input').addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file) return;
-    document.getElementById('ocr-loading').classList.remove('hidden');
+
+    const loadingEl  = document.getElementById('ocr-loading');
+    const progressEl = document.getElementById('ocr-progress');
+    const percentEl  = document.getElementById('ocr-percent');
+    const textarea   = document.getElementById('text-input');
+
+    loadingEl.classList.remove('d-none');
+    progressEl.style.width = '0%';
+    if (percentEl) percentEl.textContent = '0%';
+
     try {
         const worker = Tesseract.createWorker({
             logger: m => {
-                if (m.status === 'recognizing text') document.getElementById('ocr-progress').style.width = `${Math.round(m.progress * 100)}%`;
+                if (m.status === 'recognizing text') {
+                    const pct = Math.round(m.progress * 100);
+                    progressEl.style.width = `${pct}%`;
+                    if (percentEl) percentEl.textContent = `${pct}%`;
+                }
             }
         });
-        await worker.load(); await worker.loadLanguage('eng'); await worker.initialize('eng');
+        await worker.load();
+        await worker.loadLanguage('vie+eng');
+        await worker.initialize('vie');
+
         const { data: { text } } = await worker.recognize(file);
-        document.getElementById('text-input').value += '\n' + text;
+        if (text.trim()) {
+            textarea.value += (textarea.value ? '\n' : '') + text.trim();
+            showToast('OCR thành công', 'Đã nhận dạng và chèn chữ vào ô nhập', 'success');
+        } else {
+            showToast('Không nhận được chữ', 'Ảnh không rõ hoặc không có chữ', 'warning');
+        }
         await worker.terminate();
-    } catch { showToast('Lỗi', 'OCR thất bại', 'error'); }
-    finally { document.getElementById('ocr-loading').classList.add('hidden'); e.target.value = ''; }
+    } catch (err) {
+        console.error('[OCR]', err);
+        showToast('OCR thất bại', 'Không thể nhận dạng ảnh. Thử ảnh khác?', 'error');
+    } finally {
+        loadingEl.classList.add('d-none');
+        this.value = '';
+    }
 });
 
-if ('webkitSpeechRecognition' in window) {
-    const recognition = new webkitSpeechRecognition();
-    recognition.continuous = false; recognition.lang = 'vi-VN';
-    document.getElementById('mic-btn').addEventListener('click', () => {
-        recognition.start();
-        document.querySelector('.mic-pulse').classList.add('active');
-    });
-    recognition.onresult = event => document.getElementById('text-input').value += event.results[0][0].transcript + '\n';
-    recognition.onend = () => document.querySelector('.mic-pulse').classList.remove('active');
-} else { document.getElementById('mic-btn').style.display = 'none'; }
+// ============================================================
+//  SPEECH RECOGNITION
+// ============================================================
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const micBtn = document.getElementById('mic-btn');
 
+if (SpeechRecognition) {
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = 'vi-VN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    let isListening = false;
+
+    micBtn.addEventListener('click', () => {
+        if (isListening) {
+            recognition.stop();
+        } else {
+            recognition.start();
+        }
+    });
+
+    recognition.onstart = () => {
+        isListening = true;
+        micBtn.classList.add('recording');
+        document.querySelector('.mic-pulse').classList.add('active');
+        showToast('Đang nghe...', 'Hãy nói tên + lớp + vi phạm', 'info', 8000);
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        const textarea = document.getElementById('text-input');
+        textarea.value += (textarea.value ? '\n' : '') + transcript;
+        showToast('Đã nhận giọng nói', `"${transcript}"`, 'success');
+    };
+
+    recognition.onerror = (event) => {
+        let msg = 'Lỗi nhận dạng giọng nói';
+        if (event.error === 'not-allowed') msg = 'Cần cấp quyền microphone';
+        else if (event.error === 'no-speech') msg = 'Không nghe thấy gì, thử lại';
+        showToast('Lỗi micro', msg, 'error');
+    };
+
+    recognition.onend = () => {
+        isListening = false;
+        micBtn.classList.remove('recording');
+        document.querySelector('.mic-pulse').classList.remove('active');
+    };
+} else {
+    micBtn.style.display = 'none';
+    console.info('[Speech] SpeechRecognition không được hỗ trợ trên trình duyệt này.');
+}
+
+// ============================================================
+//  EXPORT PNG
+// ============================================================
 document.getElementById('export-png-btn').addEventListener('click', () => {
-    if (violationsData.length === 0) return showToast('Lỗi', 'Chưa có dữ liệu để xuất', 'error');
-    showToast('Đang xử lý', 'Đang tạo phiếu báo cáo...');
+    if (violationsData.length === 0)
+        return showToast('Chưa có dữ liệu', 'Hãy thêm vi phạm trước khi xuất', 'error');
+
+    showToast('Đang tạo phiếu...', 'Vui lòng chờ trong giây lát', 'info', 8000);
 
     const exportDiv = document.createElement('div');
     Object.assign(exportDiv.style, {
         position: 'fixed', top: '0', left: '-9999px', zIndex: '9999',
-        width: '800px', backgroundColor: '#ffffff', color: '#1a1a1a',
-        fontFamily: "'Be Vietnam Pro', sans-serif", padding: '40px', boxSizing: 'border-box'
+        width: '820px', backgroundColor: '#ffffff', color: '#1a1a1a',
+        fontFamily: "'Be Vietnam Pro', sans-serif", padding: '40px',
+        boxSizing: 'border-box', borderRadius: '0'
     });
 
-    const groupedData = {};
+    const grouped = {};
     violationsData.forEach(s => {
-        const v = s.violation || 'Lỗi khác';
-        if (!groupedData[v]) groupedData[v] = [];
-        groupedData[v].push(s);
+        const k = s.violation || 'Lỗi khác';
+        if (!grouped[k]) grouped[k] = [];
+        grouped[k].push(s);
     });
+
+    const formatTime = iso => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const dateStr    = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const roleText   = currentUser.role === 'HOST'
+        ? `Giám thị: <strong>${escapeHtml(currentUser.name)}</strong>`
+        : `Người xuất: <strong>${escapeHtml(currentUser.name)}</strong> (${escapeHtml(currentUser.role)})`;
 
     let groupsHtml = '';
-    let sttTotal = 1;
-    const formatTime = (iso) => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    let stt = 1;
+    for (const [vName, students] of Object.entries(grouped)) {
+        let rows = students.map(s => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:9px 12px;color:#64748b;font-weight:700;text-align:center;width:45px;">${stt++}</td>
+            <td style="padding:9px 12px;color:#64748b;font-family:monospace;font-size:12px;text-align:center;width:70px;">${formatTime(s.time)}</td>
+            <td style="padding:9px 12px;font-weight:700;color:#1e293b;font-size:14px;text-transform:uppercase;">${escapeHtml(s.name)}</td>
+            <td style="padding:9px 12px;text-align:center;">
+                <span style="display:inline-block;padding:3px 10px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:700;font-size:11px;font-family:monospace;letter-spacing:1px;">${escapeHtml(s.class)}</span>
+            </td>
+            <td style="padding:9px 12px;text-align:right;color:#94a3b8;font-style:italic;font-size:11px;">${escapeHtml(s.reporter || '')}</td>
+        </tr>`).join('');
 
-    for (const [vName, students] of Object.entries(groupedData)) {
-        let studentsHtml = '';
-        students.forEach(s => {
-            studentsHtml += `
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 10px; color: #64748b; font-weight: 600; text-align: center; width: 50px;">${sttTotal++}</td>
-                    <td style="padding: 10px; color: #64748b; font-family: monospace; font-size: 13px; text-align: center; width: 80px;">${formatTime(s.time)}</td>
-                    <td style="padding: 10px;"><span style="font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 14px;">${s.name}</span></td>
-                    
-                    <td style="padding: 10px; text-align: center; vertical-align: middle;">
-                        <span style="
-                            display: inline-block;  
-                            line-height: 18px;         /* Line-height nhỏ để gom dòng */
-                            padding: 4px 10px 6px 10px; /* Padding TRÊN 4px, DƯỚI 6px -> Đẩy chữ lên */
-                            
-                            text-align: center;
-                            background-color: #e2e8f0; 
-                            color: #475569; 
-                            border-radius: 99px; 
-                            font-weight: 700; 
-                            font-size: 12px; 
-                            min-width: 60px;
-                            box-sizing: border-box;
-                            white-space: nowrap;">
-                            ${s.class}
-                        </span>
-                    </td>
-                    <td style="padding: 10px; text-align: right; color: #94a3b8; font-style: italic; font-size: 12px;">${s.reporter || ''}</td>
-                </tr>`;
-        });
         groupsHtml += `
-            <div style="margin-bottom: 25px;">
-                <div style="background-color: #eff6ff; border-left: 5px solid #2563eb; padding: 10px 15px; margin-bottom: 10px;">
-                    <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #1e40af; text-transform: uppercase;">
-                        ${vName} <span style="font-weight: normal; font-size: 13px; color: #64748b; margin-left: 5px;">(${students.length} HS)</span>
-                    </h3>
-                </div>
-                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                    <thead style="background-color: #f8fafc; color: #64748b; font-size: 12px; text-transform: uppercase;">
-                        <tr>
-                            <th style="padding: 8px;">STT</th>
-                            <th style="padding: 8px;">Giờ</th>
-                            <th style="padding: 8px; text-align: left;">Họ Tên</th>
-                            <th style="padding: 8px;">Lớp</th>
-                            <th style="padding: 8px; text-align: right;">Người báo</th>
-                        </tr>
-                    </thead>
-                    <tbody>${studentsHtml}</tbody>
-                </table>
-            </div>`;
+        <div style="margin-bottom:24px;">
+            <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:10px 16px;margin-bottom:8px;border-radius:0 6px 6px 0;">
+                <h3 style="margin:0;font-size:15px;font-weight:800;color:#1e40af;text-transform:uppercase;">
+                    ${escapeHtml(vName)}
+                    <span style="font-weight:400;font-size:12px;color:#64748b;margin-left:8px;">(${students.length} học sinh)</span>
+                </h3>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead style="background:#f8fafc;">
+                    <tr>
+                        <th style="padding:8px 12px;text-align:center;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">STT</th>
+                        <th style="padding:8px 12px;text-align:center;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Giờ</th>
+                        <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Họ Tên</th>
+                        <th style="padding:8px 12px;text-align:center;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Lớp</th>
+                        <th style="padding:8px 12px;text-align:right;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Người báo</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
     }
 
-    const logoHtml = `<img src="https://files.catbox.moe/jyg7qk.webp" style="width: 80px; height: 80px; object-fit: contain; display: block; margin: 0 auto 15px;" crossorigin="anonymous">`;
-    const dateStr = new Date().toLocaleDateString('vi-VN');
-    const roleText = currentUser.role === 'HOST' ? `Giám thị: ${currentUser.name}` : `Người xuất: ${currentUser.name} (${currentUser.role})`;
-
     exportDiv.innerHTML = `
-        <div style="border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
-            <div style="background-color: #0d0deb; color: white; padding: 30px 20px; text-align: center;">
-                ${logoHtml}
-                <h2 style="margin: 0; font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">TRUNG TÂM GDTX - NN, TH TỈNH LÂM ĐỒNG</h2>
-                <h1 style="margin: 10px 0 0; font-size: 28px; font-weight: 800; text-transform: uppercase;">Phiếu Ghi Nhận Vi Phạm</h1>
+    <div style="border:1.5px solid #e5e7eb;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.08);">
+        <div style="background:linear-gradient(135deg,#1e3a8a,#1e40af,#2563eb);color:white;padding:28px 24px;text-align:center;">
+            <img src="https://files.catbox.moe/jyg7qk.webp" crossorigin="anonymous"
+                style="width:70px;height:70px;object-fit:contain;display:block;margin:0 auto 12px;" alt="">
+            <p style="margin:0;font-size:12px;font-weight:600;opacity:0.75;letter-spacing:2px;text-transform:uppercase;">TRUNG TÂM GDTX – NN, TH TỈNH LÂM ĐỒNG</p>
+            <h1 style="margin:8px 0 0;font-size:26px;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Phiếu Ghi Nhận Vi Phạm</h1>
+        </div>
+        <div style="padding:16px 24px;background:#f8fafc;border-bottom:1.5px solid #e5e7eb;display:flex;justify-content:space-between;font-size:13px;">
+            <div style="line-height:1.8;">
+                <div><span style="color:#64748b;font-weight:600;">Ngày:</span> <strong>${dateStr}</strong></div>
+                <div><span style="color:#64748b;font-weight:600;">Mã phòng:</span> <strong>#${hostId ? hostId.replace('GT-', '') : 'OFFLINE'}</strong></div>
             </div>
-            <div style="padding: 20px; background-color: #f8fafc; border-bottom: 2px solid #e5e7eb; font-size: 14px; display: flex; justify-content: space-between;">
-                <div>
-                    <div><span style="color: #64748b; font-weight: 600;">Ngày:</span> <b>${dateStr}</b></div>
-                    <div><span style="color: #64748b; font-weight: 600;">Mã phòng:</span> <b>#${hostId ? hostId.replace('GT-', '') : 'OFFLINE'}</b></div>
-                </div>
-                <div style="text-align: right;">
-                        <div>${roleText}</div>
-                        <div><span style="color: #64748b; font-weight: 600;">Tổng lỗi:</span> <b style="color: #dc2626;">${violationsData.length}</b></div>
-                </div>
-            </div>
-            <div style="padding: 30px;">${groupsHtml}</div>
-            <div style="background-color: #f1f5f9; padding: 15px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0;">
-                Phiếu được xuất tự động từ hệ thống Trợ Lý Giám Thị AI
+            <div style="text-align:right;line-height:1.8;">
+                <div>${roleText}</div>
+                <div><span style="color:#64748b;font-weight:600;">Tổng số lỗi:</span> <strong style="color:#dc2626;">${violationsData.length}</strong></div>
             </div>
         </div>
-    `;
+        <div style="padding:28px 24px;">${groupsHtml}</div>
+        <div style="background:#f1f5f9;padding:12px 24px;text-align:center;color:#94a3b8;font-size:11px;border-top:1px solid #e2e8f0;">
+            Xuất tự động từ Hệ Thống Trợ Lý Giám Thị AI v3.0 — ${new Date().toLocaleString('vi-VN')}
+        </div>
+    </div>`;
 
     document.body.appendChild(exportDiv);
 
     setTimeout(() => {
-        html2canvas(exportDiv, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
+        html2canvas(exportDiv, { scale: 2.5, useCORS: true, backgroundColor: '#ffffff', logging: false })
+        .then(canvas => {
             const link = document.createElement('a');
-            link.download = `Phieu_Vi_Pham_${dateStr.replace(/\//g, '-')}.png`;
+            link.download = `PhieuViPham_${dateStr.replace(/\//g, '-')}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
-            document.body.removeChild(exportDiv);
-            showToast('Thành công', 'Đã tải phiếu xuống');
-        }).catch(err => {
-            console.error(err);
+            showToast('Xuất PNG thành công!', 'Phiếu đã được tải về máy', 'success');
+        })
+        .catch(err => {
+            console.error('[Export PNG]', err);
+            showToast('Xuất PNG thất bại', 'Lỗi khi tạo ảnh (CORS hoặc thư viện)', 'error');
+        })
+        .finally(() => {
             if (document.body.contains(exportDiv)) document.body.removeChild(exportDiv);
-            showToast('Lỗi', 'Không thể tạo ảnh (Lỗi CORS hoặc thư viện)', 'error');
         });
-    }, 500);
+    }, 600);
 });
 
+// ============================================================
+//  EXPORT EXCEL
+// ============================================================
 document.getElementById('export-excel-btn').addEventListener('click', () => {
-    if (violationsData.length === 0) return;
-    const wb = XLSX.utils.book_new();
-    const wsData = [['STT', 'Thời gian', 'Họ Tên', 'Lớp', 'Lỗi', 'Người báo']];
-    violationsData.forEach((s, i) => wsData.push([i + 1, new Date(s.time).toLocaleString(), s.name, s.class, s.violation, s.reporter]));
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, "ViPham");
-    XLSX.writeFile(wb, `DS_Loi_${hostId || 'Offline'}.xlsx`);
+    if (violationsData.length === 0)
+        return showToast('Chưa có dữ liệu', 'Hãy thêm vi phạm trước khi xuất', 'error');
+
+    const wb     = XLSX.utils.book_new();
+    const header = [['STT', 'Thời gian', 'Họ Tên', 'Lớp', 'Lỗi Vi Phạm', 'Người báo']];
+    const rows   = violationsData.map((s, i) => [
+        i + 1,
+        new Date(s.time).toLocaleString('vi-VN'),
+        s.name, s.class, s.violation, s.reporter || ''
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([...header, ...rows]);
+
+    // Column widths
+    ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 25 }, { wch: 8 }, { wch: 35 }, { wch: 20 }];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'DanhSachViPham');
+    XLSX.writeFile(wb, `DanhSachViPham_${hostId || 'Offline'}_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`);
+    showToast('Xuất Excel thành công!', `${violationsData.length} dòng đã được xuất`, 'success');
 });
 
-setInterval(() => document.getElementById('realtime-clock').textContent = new Date().toLocaleTimeString('vi-VN', { hour12: false }), 1000);
+// ============================================================
+//  REALTIME CLOCK
+// ============================================================
+function updateClock() {
+    const el = document.getElementById('realtime-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+}
+updateClock();
+setInterval(updateClock, 1000);
 
-// --- AUTO RESTORE SESSION ON LOAD ---
+// ============================================================
+//  AUTO-RESTORE SESSION ON PAGE LOAD
+// ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Kiểm tra session Khách
-    const savedClientSession = localStorage.getItem(CLIENT_SESSION_KEY);
-    if (savedClientSession) {
+    // Try restore Client session first
+    const savedClient = localStorage.getItem(CLIENT_SESSION_KEY);
+    if (savedClient) {
         try {
-            const sess = JSON.parse(savedClientSession);
-            if (sess && sess.pin) {
-                console.log('Phát hiện phiên khách cũ:', sess);
+            const sess = JSON.parse(savedClient);
+            if (sess && sess.pin && sess.name && sess.role) {
                 currentUser = { name: sess.name, role: sess.role };
-                isHost = false;
-                hostId = `GT-${sess.pin}`;
-                roomTopic = `giamthi_room_${sess.pin}`;
-                showToast('Khôi phục', 'Đang kết nối lại phòng cũ...');
+                isHost      = false;
+                hostId      = `GT-${sess.pin}`;
+                roomTopic   = `giamthi_room_${sess.pin}`;
+                showToast('Khôi phục phiên', `Đang kết nối lại phòng #${sess.pin}...`, 'info');
                 initMQTT(false);
-                return; // Thoát luôn nếu là khách
+                return;
             }
-        } catch (e) { console.error(e); localStorage.removeItem(CLIENT_SESSION_KEY); }
+        } catch(e) {
+            localStorage.removeItem(CLIENT_SESSION_KEY);
+        }
     }
 
-    // 2. Kiểm tra session Chủ (Host)
-    const savedHostSession = localStorage.getItem(HOST_SESSION_KEY);
-    if (savedHostSession) {
+    // Try restore Host session
+    const savedHost = localStorage.getItem(HOST_SESSION_KEY);
+    if (savedHost) {
         try {
-            const sess = JSON.parse(savedHostSession);
-            if (sess && sess.pin) {
-                console.log('Phát hiện phiên Host cũ:', sess);
+            const sess = JSON.parse(savedHost);
+            if (sess && sess.pin && sess.name) {
                 currentUser = { name: sess.name, role: 'HOST' };
-                isHost = true;
-                myId = `GT-${sess.pin}`;
-                hostId = myId;
-                roomTopic = `giamthi_room_${sess.pin}`;
-
-                showToast('Khôi phục', 'Đang khôi phục phòng máy chủ...');
+                isHost      = true;
+                myId        = `GT-${sess.pin}`;
+                hostId      = myId;
+                roomTopic   = `giamthi_room_${sess.pin}`;
+                showToast('Khôi phục phòng', `Đang khôi phục máy chủ phòng #${sess.pin}...`, 'info');
                 initMQTT(true);
             }
-        } catch (e) { console.error(e); localStorage.removeItem(HOST_SESSION_KEY); }
+        } catch(e) {
+            localStorage.removeItem(HOST_SESSION_KEY);
+        }
     }
 });
