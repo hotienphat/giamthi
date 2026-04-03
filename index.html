@@ -1,97 +1,100 @@
 <!DOCTYPE html>
-<html lang="vi" class="dark">
+<html lang="vi">
 
 <head>
-    <link rel="icon" href="https://files.catbox.moe/jyg7qk.webp">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trợ Lý Giám Thị AI - P2P Sync (Updated)</title>
+    <title>Trợ Lý Giám Thị AI | Hệ Thống Trực Nề Nếp</title>
+    <meta name="description" content="Hệ thống quản lý trực nề nếp thông minh, kết nối thời gian thực qua MQTT cho các lớp học.">
+    <link rel="icon" href="https://files.catbox.moe/jyg7qk.webp">
 
-    <!-- Thư viện giao diện và xử lý (CDN) -->
-    <script>const _w = console.warn; console.warn = (...a) => { if (typeof a[0] === 'string' && a[0].includes('tailwindcss')) return; _w.apply(console, a) };</script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- Libraries (NO Tailwind CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src='https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js'></script>
-    <!-- MQTT: Giao thức siêu nhẹ vượt mọi tường lửa thay thế P2P -->
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
     <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
-
-    <!-- Kết nối file CSS riêng -->
+    <!-- Custom CSS (complete, no Tailwind dependency) -->
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body class="school-bg text-gray-100 min-h-screen font-sans overflow-x-hidden">
+<body class="school-bg">
 
-    <!-- LOGIN SCREEN -->
-    <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/95 backdrop-blur-xl">
-        <div
-            class="w-full max-w-md p-6 bg-gray-800/80 rounded-2xl border border-gray-700 shadow-2xl transform transition-all">
-            <div class="text-center mb-6">
-                <div class="mx-auto w-20 h-20 mb-3 flex items-center justify-center">
-                    <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo"
-                        class="w-full h-full object-contain drop-shadow-xl">
+    <!-- Grid Background -->
+    <div class="grid-pattern" aria-hidden="true"></div>
+
+    <!-- ========== LOGIN SCREEN ========== -->
+    <div id="login-screen" class="login-screen-overlay">
+        <!-- Floating Particles -->
+        <div class="floating-particle p1" aria-hidden="true"></div>
+        <div class="floating-particle p2" aria-hidden="true"></div>
+        <div class="floating-particle p3" aria-hidden="true"></div>
+        <div class="login-card">
+
+            <!-- Logo & Title -->
+            <div class="login-logo-section">
+                <div class="logo-container">
+                    <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo" class="logo-img">
                 </div>
-                <h1 class="text-2xl font-bold text-white uppercase tracking-wider">Hệ Thống Trực Nề Nếp</h1>
-                <p class="text-gray-400 text-xs mt-1">Phiên bản 2.0</p>
+                <h1 class="login-title">Hệ Thống Trực Nề Nếp</h1>
+                <p class="login-version-badge">
+                    <i class="fa-solid fa-circle fa-2xs anim-pulse"></i>
+                    Phiên bản 3.0 — Real-time Sync
+                </p>
             </div>
 
             <!-- Tabs -->
-            <div class="flex gap-2 mb-6">
-                <button onclick="switchTab('create')" id="tab-create"
-                    class="tab-btn active flex-1 py-2 rounded-lg font-medium text-sm transition-all">
+            <div class="tab-container">
+                <button onclick="switchTab('create')" id="tab-create" class="tab-btn active">
                     <i class="fa-solid fa-server"></i> Tạo Máy Chủ
                 </button>
-                <button onclick="switchTab('join')" id="tab-join"
-                    class="tab-btn flex-1 py-2 rounded-lg font-medium text-sm transition-all">
+                <button onclick="switchTab('join')" id="tab-join" class="tab-btn">
                     <i class="fa-solid fa-link"></i> Kết Nối
                 </button>
             </div>
 
-            <!-- Create Room Form (Host) -->
-            <div id="form-create" class="space-y-4">
-                <div class="bg-blue-900/20 p-3 rounded-lg border border-blue-500/30 text-xs text-blue-200">
-                    <i class="fa-solid fa-circle-info mr-1"></i>
-                    Bạn sẽ là máy chủ. Hãy giữ trình duyệt mở để các máy khác kết nối.
+            <!-- Create Room Form -->
+            <div id="form-create" class="form-group-stack">
+                <div class="info-box">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Bạn sẽ là <strong>máy chủ</strong>. Hãy giữ trình duyệt mở để các máy khác kết nối.
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên Giám Thị (Host)</label>
-                    <select id="host-name"
-                        class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none cursor-pointer hover:bg-gray-800/50 transition-colors">
-                        <option value="">-- Chọn danh tính --</option>
-                        <option value="12A1 - Hồ Tiến Phát">12A1 - Hồ Tiến Phát</option>
-                        <option value="12A2 - Đỗ Hữu Tính">12A2 - Đỗ Hữu Tính</option>
-                        <option value="12A3 - Phạm Lê Minh Hiếu">12A3 - Phạm Lê Minh Hiếu</option>
-                        <option value="12A4 - Lớp Trưởng">12A4 - Lớp Trưởng</option>
-                        <option value="12A5 - Lê Văn Huyền">12A5 - Lê Văn Huyền</option>
-                        <option value="12A6 - Giàng A Thánh">12A6 - Giàng A Thánh</option>
-                        <!-- NEW OPTION ADDED -->
-                        <option value="11B1 - Vũ Thị Vân Anh">11B1 - Vũ Thị Vân Anh</option>
-                        <option value="Tổ Giám Thị - Phan Thị Thuý">Tổ Giám Thị (Phan Thị Thuý)</option>
+                    <p class="section-label">Danh tính Giám Thị</p>
+                    <select id="host-name" class="form-input">
+                        <option value="">— Chọn danh tính —</option>
+                        <option value="12A1 - Hồ Tiến Phát">12A1 — Hồ Tiến Phát</option>
+                        <option value="12A2 - Đỗ Hữu Tính">12A2 — Đỗ Hữu Tính</option>
+                        <option value="12A3 - Phạm Lê Minh Hiếu">12A3 — Phạm Lê Minh Hiếu</option>
+                        <option value="12A4 - Lớp Trưởng">12A4 — Lớp Trưởng</option>
+                        <option value="12A5 - Lê Văn Huyền">12A5 — Lê Văn Huyền</option>
+                        <option value="12A6 - Giàng A Thánh">12A6 — Giàng A Thánh</option>
+                        <option value="11B1 - Vũ Thị Vân Anh">11B1 — Vũ Thị Vân Anh</option>
+                        <option value="Tổ Giám Thị - Phan Thị Thuý">Tổ Giám Thị — Phan Thị Thuý</option>
                     </select>
                 </div>
-                <button id="btn-create-room"
-                    class="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-wifi"></i> Tạo Phòng Ngay
+                <button id="btn-create-room" class="btn btn-primary btn-full">
+                    <i class="fa-solid fa-wifi"></i> Khởi động Máy Chủ
                 </button>
             </div>
 
-            <!-- Join Room Form (Client) -->
-            <div id="form-join" class="space-y-4 hidden">
+            <!-- Join Room Form -->
+            <div id="form-join" class="form-group-stack d-none">
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Mã Phòng (6 số)</label>
-                    <input type="number" id="join-pin"
-                        class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white font-mono text-center tracking-widest text-lg focus:border-green-500 outline-none"
-                        placeholder="xxxxxx">
+                    <p class="section-label">Mã Phòng (6 chữ số)</p>
+                    <input type="number" id="join-pin" class="form-input form-input--pin"
+                        placeholder="• • • • • •" maxlength="6">
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Đăng nhập với tư cách</label>
-                    <select id="join-role"
-                        class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none">
-                        <option value="">-- Chọn vai trò/Lớp --</option>
+                    <p class="section-label">Vai trò / Lớp</p>
+                    <select id="join-role" class="form-input">
+                        <option value="">— Chọn vai trò / Lớp —</option>
                         <option value="MONITOR">Giám thị phụ</option>
                         <option value="12A1">Lớp 12A1</option>
                         <option value="12A2">Lớp 12A2</option>
@@ -99,310 +102,287 @@
                         <option value="12A4">Lớp 12A4</option>
                         <option value="12A5">Lớp 12A5</option>
                         <option value="12A6">Lớp 12A6</option>
-                        <!-- NEW OPTION ADDED -->
                         <option value="11B1">Lớp 11B1</option>
                     </select>
                 </div>
-
-                <div id="password-field" class="hidden">
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Mật khẩu lớp</label>
-                    <input type="password" id="join-password"
-                        class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none"
-                        placeholder="Nhập mật khẩu...">
+                <div id="password-field" class="d-none">
+                    <p class="section-label">Mật khẩu lớp</p>
+                    <input type="password" id="join-password" class="form-input" placeholder="Nhập mật khẩu...">
                 </div>
-
-                <div id="guest-name-field" class="hidden">
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Tên người trực (Bạn là
-                        ai?)</label>
-                    <input type="text" id="guest-name"
-                        class="w-full p-3 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-green-500 outline-none"
-                        placeholder="VD: Nguyễn Văn A...">
+                <div id="guest-name-field" class="d-none">
+                    <p class="section-label">Tên người trực</p>
+                    <input type="text" id="guest-name" class="form-input" placeholder="VD: Nguyễn Văn A...">
                 </div>
-
-                <button id="btn-join-room"
-                    class="w-full py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-plug"></i> Kết Nối
+                <button id="btn-join-room" class="btn btn-success btn-full">
+                    <i class="fa-solid fa-plug-circle-check"></i> Kết Nối Ngay
                 </button>
             </div>
 
-            <div class="mt-4 p-3 bg-gray-700/30 rounded-lg border border-gray-700 text-xs text-gray-400">
-                <p><strong>Liên hệ lấy mật khẩu:</strong>Tổ giám thị hoặc Liên hệ: Hồ Tiến Phát 12A1</p>
+            <div class="contact-info" style="margin-top:24px;">
+                <i class="fa-regular fa-circle-question"></i>
+                <strong>Liên hệ lấy mật khẩu:</strong> Tổ giám thị hoặc Hồ Tiến Phát — 12A1
             </div>
         </div>
     </div>
 
-    <!-- MAIN APP -->
-    <main id="main-app"
-        class="container mx-auto p-4 lg:p-6 max-w-7xl hidden opacity-0 transition-opacity duration-500 relative">
-        <!-- Header Info -->
-        <header
-            class="flex flex-col md:flex-row justify-between items-center mb-6 bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
-            <div class="flex items-center gap-4 w-full md:w-auto">
-                <div class="flex flex-col">
-                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                        <span id="display-role" class="bg-blue-600 text-xs px-2 py-1 rounded">HOST</span>
-                        <span id="display-name">Giám thị</span>
-                    </h2>
-                    <p class="text-sm text-gray-300 flex items-center gap-2 mt-1">
-                        <span id="connection-status-dot"
-                            class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
-                        <span id="connection-status-text">Đang kết nối...</span>
-                    </p>
+    <!-- ========== MAIN APP ========== -->
+    <main id="main-app" class="app-container d-none app-hidden">
+
+        <!-- APP HEADER -->
+        <header class="app-header">
+            <div class="header-identity">
+                <div class="header-logo-wrap">
+                    <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo" class="header-logo-img">
+                </div>
+                <div>
+                    <div class="header-name-row">
+                        <span id="display-role" class="role-badge role-badge-host">HOST</span>
+                        <h2 id="display-name" class="header-display-name">Giám Thị</h2>
+                    </div>
+                    <div class="header-status-row">
+                        <span id="connection-status-dot" class="status-dot pending" title="Trạng thái"></span>
+                        <span id="connection-status-text" class="header-status-text">Đang kết nối...</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="flex items-center gap-3 mt-4 md:mt-0">
-                <div id="pin-container"
-                    class="hidden bg-blue-900/30 px-4 py-2 rounded-xl border border-blue-500/50 flex flex-col items-end">
-                    <span class="text-[10px] text-blue-300 uppercase font-bold">Mã Phòng</span>
-                    <span id="display-pin"
-                        class="font-mono font-bold text-white text-xl tracking-wider select-all cursor-pointer"
-                        title="Click để copy">------</span>
+            <div class="header-actions">
+                <div id="pin-container" class="pin-box d-none" onclick="copyPin()" title="Click để sao chép">
+                    <span class="pin-label">Mã Phòng</span>
+                    <span id="display-pin" class="pin-display">------</span>
+                    <span class="pin-copy-hint"><i class="fa-regular fa-copy"></i> Copy</span>
                 </div>
-                <div class="flex items-center gap-2 bg-gray-900/50 px-4 py-2 rounded-xl border border-gray-700">
-                    <i class="fa-regular fa-clock text-blue-400"></i>
-                    <span id="realtime-clock" class="font-mono font-semibold text-gray-200">00:00:00</span>
+                <div class="clock-display">
+                    <i class="fa-regular fa-clock" style="color:#60a5fa;font-size:12px;"></i>
+                    <span id="realtime-clock">00:00:00</span>
                 </div>
-                <button id="btn-logout"
-                    class="p-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg border border-red-900/50 transition-colors"
-                    title="Thoát">
+                <button id="btn-logout" class="logout-btn" title="Đăng xuất">
                     <i class="fa-solid fa-power-off"></i>
                 </button>
             </div>
         </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <!-- INPUT SECTION -->
-            <div class="lg:col-span-5 space-y-6">
-                <!-- AI Input Box -->
-                <div
-                    class="bg-gray-800/60 backdrop-blur-md p-6 rounded-2xl border border-gray-700 shadow-xl relative overflow-hidden">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold flex items-center gap-2">
-                            <i class="fa-solid fa-keyboard text-blue-400"></i> Nhập liệu
+        <!-- MAIN GRID -->
+        <div class="main-grid">
+
+            <!-- LEFT: INPUT -->
+            <div class="col-left">
+
+                <!-- Input Section -->
+                <div class="input-section">
+                    <div class="section-header-row">
+                        <h3 class="section-title">
+                            <span class="section-icon-wrap">
+                                <i class="fa-solid fa-keyboard" style="color:#60a5fa;font-size:12px;"></i>
+                            </span>
+                            Nhập Liệu Vi Phạm
                         </h3>
-
-                        <!-- TOGGLE ENTER TO SEND -->
-                        <label
-                            class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none bg-gray-900/50 px-3 py-1 rounded-full border border-gray-600 hover:border-blue-500 transition-colors"
-                            title="Bật để ấn Enter là gửi luôn (PC). Tắt để ấn Enter xuống dòng (Mobile)">
-                            <input type="checkbox" id="enter-to-send"
-                                class="w-3.5 h-3.5 accent-blue-500 rounded cursor-pointer">
-                            Enter gửi
+                        <label class="toggle-label" title="Bật: Enter=Gửi (PC). Tắt: Enter=xuống dòng (Mobile)">
+                            <input type="checkbox" id="enter-to-send" class="toggle-checkbox">
+                            <span>Enter gửi</span>
                         </label>
                     </div>
 
-                    <div class="flex gap-2 mb-2 justify-end">
-                        <button id="mic-btn"
-                            class="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors relative"
-                            title="Nhập giọng nói">
-                            <i class="fa-solid fa-microphone text-white text-xs"></i>
-                            <span class="mic-pulse absolute inset-0 rounded-full bg-red-500 opacity-0"></span>
+                    <div class="toolbar-row">
+                        <button id="mic-btn" class="icon-btn" title="Nhập bằng giọng nói">
+                            <i class="fa-solid fa-microphone"></i>
+                            <span class="mic-pulse"></span>
                         </button>
-                        <label for="ocr-input"
-                            class="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors cursor-pointer"
-                            title="Quét ảnh">
-                            <i class="fa-solid fa-camera text-white text-xs"></i>
+                        <label for="ocr-input" class="icon-btn" style="cursor:pointer;" title="Quét chữ từ ảnh (OCR)">
+                            <i class="fa-solid fa-camera"></i>
                         </label>
-                        <input type="file" id="ocr-input" accept="image/*" class="hidden">
-                    </div>
-
-                    <textarea id="text-input" rows="5"
-                        class="w-full bg-gray-900 border border-gray-600 rounded-xl p-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none custom-scrollbar font-mono text-sm"
-                        placeholder="VD: 12a1 di muon..."></textarea>
-
-                    <div id="ocr-loading" class="hidden mt-2">
-                        <div class="w-full bg-gray-700 rounded-full h-1.5 mt-2">
-                            <div id="ocr-progress" class="bg-yellow-400 h-1.5 rounded-full" style="width: 0%"></div>
+                        <input type="file" id="ocr-input" accept="image/*" style="display:none;">
+                        <div class="input-hint">
+                            <i class="fa-solid fa-lightbulb" style="color:rgba(234,179,8,.6);"></i>
+                            VD: <span style="font-family:var(--font-mono);color:#94a3b8;">12A1 Nguyễn Văn A - muon</span>
                         </div>
                     </div>
 
-                    <button id="process-btn"
-                        class="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-paper-plane"></i> Gửi đi
+                    <textarea id="text-input" rows="6" class="main-textarea custom-scrollbar"
+                        placeholder="Nhập danh sách vi phạm...&#10;VD: 12a1 Nguyễn Văn A đi muộn&#10;     12a2 Trần Thị B - không đeo thẻ"
+                    ></textarea>
+
+                    <div id="ocr-loading" class="ocr-loading-box d-none">
+                        <div class="ocr-status-row">
+                            <span><i class="fa-solid fa-spinner spinner"></i> Đang nhận dạng chữ...</span>
+                            <span id="ocr-percent">0%</span>
+                        </div>
+                        <div class="ocr-progress-bar">
+                            <div id="ocr-progress" class="ocr-progress-fill" style="width:0%"></div>
+                        </div>
+                    </div>
+
+                    <button id="process-btn" class="btn btn-primary btn-full" style="margin-top:16px;">
+                        <i class="fa-solid fa-paper-plane"></i> Gửi Báo Cáo
                     </button>
                 </div>
 
                 <!-- Excel Import -->
-                <div class="bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
-                    <h3 class="text-sm font-bold flex items-center gap-2 mb-2 text-green-400">
-                        <i class="fa-solid fa-file-excel"></i> Nhập Excel
+                <div class="glass-card card-pad">
+                    <h3 class="card-section-title card-section-title--green">
+                        <i class="fa-solid fa-file-excel"></i> Nhập từ File Excel
                     </h3>
-                    <div class="relative dashed-border rounded-xl p-4 text-center hover:bg-gray-700/30 cursor-pointer">
-                        <input type="file" id="excel-input" accept=".xlsx, .xls"
-                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                        <p class="text-xs text-gray-300">Chọn file .xlsx</p>
+                    <div class="upload-zone" id="excel-drop-zone" style="position:relative;">
+                        <input type="file" id="excel-input" accept=".xlsx,.xls"
+                            style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;">
+                        <div style="pointer-events:none;text-align:center;">
+                            <i class="fa-solid fa-cloud-arrow-up" style="font-size:24px;color:#64748b;display:block;margin-bottom:8px;"></i>
+                            <p style="font-size:12px;color:#94a3b8;">Kéo thả hoặc <span style="color:#60a5fa;font-weight:600;">chọn file</span></p>
+                            <p style="font-size:11px;color:#475569;margin-top:4px;">Hỗ trợ .xlsx, .xls</p>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Export Options -->
-                <div class="bg-gray-800/60 backdrop-blur-md p-4 rounded-2xl border border-gray-700 shadow-xl">
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="export-png-btn"
-                            class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+                <!-- Export -->
+                <div class="glass-card card-pad">
+                    <h3 class="card-section-title">
+                        <i class="fa-solid fa-file-export"></i> Xuất dữ liệu
+                    </h3>
+                    <div class="export-grid">
+                        <button id="export-png-btn" class="btn export-btn-indigo">
                             <i class="fa-solid fa-image"></i> Xuất PNG
                         </button>
-                        <button id="export-excel-btn"
-                            class="bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
-                            <i class="fa-solid fa-file-export"></i> Xuất Excel
+                        <button id="export-excel-btn" class="btn export-btn-emerald">
+                            <i class="fa-solid fa-file-excel"></i> Xuất Excel
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- LIST SECTION -->
-            <div class="lg:col-span-7">
-                <div
-                    class="bg-gray-800/60 backdrop-blur-md rounded-2xl border border-gray-700 shadow-xl flex flex-col h-[calc(100vh-6rem)]">
-                    <div class="p-4 border-b border-gray-700 bg-gray-800/80 rounded-t-2xl space-y-3">
-                        <div class="flex justify-between items-center">
-                            <h3 class="font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-list-check text-blue-400"></i> Danh sách vi phạm
-                                <span id="count-badge"
-                                    class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
+            <!-- RIGHT: REPORT -->
+            <div class="col-right">
+                <div class="report-section">
+                    <div class="report-header">
+                        <div class="report-title-row">
+                            <h3 class="section-title">
+                                <span class="section-icon-wrap">
+                                    <i class="fa-solid fa-list-check" style="color:#60a5fa;font-size:12px;"></i>
+                                </span>
+                                Danh Sách Vi Phạm
+                                <span id="count-badge" class="count-badge">0</span>
                             </h3>
-                            <button id="clear-all-btn"
-                                class="hidden text-xs bg-red-900/50 text-red-300 px-3 py-1.5 rounded hover:bg-red-900 border border-red-800 transition-colors">
-                                <i class="fa-solid fa-trash"></i> Xóa Hết
+                            <button id="clear-all-btn" class="btn btn-danger d-none clear-btn">
+                                <i class="fa-solid fa-trash"></i> Xóa Tất Cả
                             </button>
                         </div>
 
-                        <!-- DISPLAY SETTINGS BAR -->
-                        <div class="relative">
-                            <button id="toggle-display-btn"
-                                class="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg border border-gray-600 text-xs font-medium text-gray-200 transition-colors">
-                                <i class="fa-solid fa-eye"></i> Tuỳ chỉnh hiển thị
-                                <i class="fa-solid fa-chevron-down text-[10px] ml-1"></i>
+                        <div style="position:relative;">
+                            <button id="toggle-display-btn" class="btn btn-ghost display-settings-btn">
+                                <i class="fa-solid fa-sliders" style="font-size:11px;"></i>
+                                Tuỳ chỉnh cột
+                                <i class="fa-solid fa-chevron-down" style="font-size:9px;"></i>
                             </button>
-
-                            <!-- Dropdown Menu -->
-                            <div id="display-menu"
-                                class="absolute top-10 left-0 w-48 bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-3 z-20 hidden transform origin-top-left transition-all">
-                                <div class="space-y-2">
-                                    <label
-                                        class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
-                                        <input type="checkbox" id="show-time" checked
-                                            class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
-                                        <span class="text-sm text-gray-200 select-none">Thời gian nhập</span>
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
-                                        <input type="checkbox" id="show-name" checked
-                                            class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
-                                        <span class="text-sm text-gray-200 select-none">Họ và Tên</span>
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
-                                        <input type="checkbox" id="show-class" checked
-                                            class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
-                                        <span class="text-sm text-gray-200 select-none">Lớp</span>
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
-                                        <input type="checkbox" id="show-reporter" checked
-                                            class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
-                                        <span class="text-sm text-gray-200 select-none">Người Báo</span>
-                                    </label>
-                                </div>
+                            <div id="display-menu" class="display-menu d-none">
+                                <p class="display-menu-header">Hiện thị cột</p>
+                                <label class="display-menu-item">
+                                    <input type="checkbox" id="show-time" checked style="accent-color:#3b82f6;">
+                                    <i class="fa-regular fa-clock" style="font-size:11px;color:#64748b;width:12px;"></i>
+                                    <span>Thời gian</span>
+                                </label>
+                                <label class="display-menu-item">
+                                    <input type="checkbox" id="show-name" checked style="accent-color:#3b82f6;">
+                                    <i class="fa-solid fa-user" style="font-size:11px;color:#64748b;width:12px;"></i>
+                                    <span>Họ và Tên</span>
+                                </label>
+                                <label class="display-menu-item">
+                                    <input type="checkbox" id="show-class" checked style="accent-color:#3b82f6;">
+                                    <i class="fa-solid fa-school" style="font-size:11px;color:#64748b;width:12px;"></i>
+                                    <span>Lớp</span>
+                                </label>
+                                <label class="display-menu-item">
+                                    <input type="checkbox" id="show-reporter" checked style="accent-color:#3b82f6;">
+                                    <i class="fa-solid fa-user-shield" style="font-size:11px;color:#64748b;width:12px;"></i>
+                                    <span>Người báo</span>
+                                </label>
                             </div>
                         </div>
                     </div>
 
-                    <div id="report-container" class="flex-1 overflow-auto custom-scrollbar p-4">
-                        <div class="flex flex-col items-center justify-center h-full text-gray-500 opacity-60">
-                            <i class="fa-solid fa-wifi text-4xl mb-3 animate-pulse"></i>
-                            <p>Đang chờ dữ liệu...</p>
+                    <div id="report-container" class="report-content custom-scrollbar">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fa-solid fa-satellite-dish" style="color:rgba(59,130,246,.25);"></i>
+                            </div>
+                            <p style="font-size:14px;font-weight:500;color:#64748b;">Đang chờ dữ liệu...</p>
+                            <p style="font-size:12px;color:#475569;">Nhập vi phạm ở bên trái để bắt đầu</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- HOST ONLY: CONNECTED USERS BUBBLE -->
-        <div id="connected-users-bubble" class="fixed bottom-6 right-6 z-50 hidden">
-            <button id="toggle-user-list-btn"
-                class="bg-blue-600 hover:bg-blue-500 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center relative transition-transform hover:scale-110 border-2 border-blue-400">
-                <i class="fa-solid fa-users text-xl"></i>
-                <span id="user-count-badge"
-                    class="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full border-2 border-gray-900 font-bold">0</span>
+        <!-- HOST BUBBLE -->
+        <div id="connected-users-bubble" class="user-bubble d-none">
+            <button id="toggle-user-list-btn" class="float-btn" title="Xem máy kết nối">
+                <i class="fa-solid fa-users"></i>
+                <span id="user-count-badge" class="float-btn-badge">0</span>
             </button>
-
-            <!-- User List Popover -->
-            <div id="user-list-popover"
-                class="absolute bottom-16 right-0 w-72 bg-gray-800/95 backdrop-blur-xl border border-gray-600 rounded-xl shadow-2xl p-0 hidden transform origin-bottom-right overflow-hidden">
-                <div class="p-3 border-b border-gray-700 bg-gray-900/50">
-                    <h4 class="text-xs font-bold text-gray-300 uppercase flex items-center gap-2">
-                        <i class="fa-solid fa-network-wired text-green-500"></i> Máy đang kết nối
-                    </h4>
+            <div id="user-list-popover" class="user-popover d-none">
+                <div class="user-popover-header">
+                    <div class="online-dot"></div>
+                    <h4 class="user-popover-title">Máy đang kết nối</h4>
                 </div>
-                <ul id="user-list-ul" class="max-h-60 overflow-y-auto custom-scrollbar p-2 space-y-1">
-                    <!-- Javascript will populate this -->
-                    <li class="text-gray-500 text-xs text-center p-2 italic">Chưa có ai kết nối...</li>
+                <ul id="user-list-ul" class="user-list custom-scrollbar">
+                    <li class="user-list-empty">Chưa có máy nào kết nối...</li>
                 </ul>
             </div>
         </div>
     </main>
 
-    <!-- EDIT MODAL (POPUP SỬA BÁO CÁO) -->
-    <div id="edit-modal"
-        class="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/90 backdrop-blur-sm hidden">
-        <div
-            class="bg-gray-800 rounded-2xl border border-gray-700 shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-pen-to-square text-yellow-500"></i> Sửa báo cáo
+    <!-- EDIT MODAL -->
+    <div id="edit-modal" class="modal-overlay d-none">
+        <div class="modal-card">
+            <h3 class="modal-title">
+                <span class="modal-icon-wrap">
+                    <i class="fa-solid fa-pen-to-square" style="color:#fbbf24;font-size:14px;"></i>
+                </span>
+                Chỉnh sửa vi phạm
             </h3>
-
             <input type="hidden" id="edit-id">
-
-            <div class="space-y-4">
+            <div class="form-group-stack">
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Họ và Tên</label>
-                    <input type="text" id="edit-name"
-                        class="w-full p-2.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none">
+                    <p class="section-label">Họ và Tên</p>
+                    <input type="text" id="edit-name" class="form-input" placeholder="Tên học sinh">
                 </div>
-
-                <div class="grid grid-cols-2 gap-4">
+                <div class="form-grid-2">
                     <div>
-                        <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Lớp</label>
-                        <input type="text" id="edit-class"
-                            class="w-full p-2.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none uppercase font-mono">
+                        <p class="section-label">Lớp</p>
+                        <input type="text" id="edit-class" class="form-input" placeholder="12A1"
+                            style="font-family:var(--font-mono);text-transform:uppercase;text-align:center;">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-gray-400 uppercase mb-1">Lỗi Vi Phạm</label>
-                        <input type="text" id="edit-violation" list="violation-suggestions"
-                            class="w-full p-2.5 bg-gray-900/50 border border-gray-600 rounded-xl text-white focus:border-blue-500 outline-none">
-                        <datalist id="violation-suggestions">
-                            <!-- JS will populate -->
-                        </datalist>
+                        <p class="section-label">Lỗi vi phạm</p>
+                        <input type="text" id="edit-violation" list="violation-suggestions" class="form-input" placeholder="Loại lỗi">
+                        <datalist id="violation-suggestions"></datalist>
                     </div>
                 </div>
             </div>
-
-            <div class="flex gap-3 mt-6">
-                <button onclick="closeEditModal()"
-                    class="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium rounded-xl transition-colors">
-                    Hủy bỏ
+            <div class="modal-actions">
+                <button onclick="closeEditModal()" class="btn btn-ghost modal-action-btn">
+                    <i class="fa-solid fa-xmark"></i> Hủy
                 </button>
-                <button onclick="saveEdit()"
-                    class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-save"></i> Lưu lại
+                <button onclick="saveEdit()" class="btn btn-primary modal-action-btn">
+                    <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- TOAST NOTIFICATION -->
-    <div id="toast"
-        class="fixed top-4 right-4 bg-gray-800 border-l-4 border-blue-500 text-white p-4 rounded shadow-2xl transform translate-x-full transition-transform duration-300 z-[100] max-w-sm flex items-start gap-3">
-        <i class="fa-solid fa-circle-info mt-1 text-blue-400"></i>
-        <div>
-            <h4 class="font-bold text-sm" id="toast-title">Thông báo</h4>
-            <p class="text-sm text-gray-300" id="toast-message">Nội dung</p>
+    <!-- TOAST -->
+    <div id="toast" class="toast-info" role="alert" aria-live="polite">
+        <div id="toast-icon" class="toast-icon-wrap">
+            <i class="fa-solid fa-circle-info"></i>
         </div>
+        <div class="toast-body">
+            <h4 class="toast-title" id="toast-title">Thông báo</h4>
+            <p class="toast-message" id="toast-message">Nội dung</p>
+        </div>
+        <button onclick="document.getElementById('toast').classList.remove('show')" class="toast-close-btn">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div id="toast-progress" class="toast-progress" style="background:#3b82f6;"></div>
     </div>
 
-    <!-- Kết nối file JS riêng -->
     <script src="script.js"></script>
 </body>
-
 </html>
