@@ -26,6 +26,7 @@ const VIOLATION_MAP = {
 const CLIENT_SESSION_KEY = 'GiamThiAI_v3_Client';
 const HOST_SESSION_KEY   = 'GiamThiAI_v3_Host';
 const HOST_DATA_KEY      = 'GiamThiAI_v3_Data';
+const CLIENT_QUEUE_KEY   = 'GiamThiAI_v3_ClientQueue';
 
 // Broker pool - tự động fallback nếu 1 bị lỗi
 const MQTT_BROKERS = [
@@ -42,6 +43,7 @@ let myId          = '';
 let hostId        = '';
 let currentUser   = { name: '', role: '' };
 let violationsData = [];
+let pendingQueue  = [];
 let isHost        = false;
 let currentBrokerIdx = 0;
 let toastTimer    = null;
@@ -314,6 +316,7 @@ function initMQTT(isHostInit, brokerIdx = 0) {
             mqttClient.subscribe(`${roomTopic}/client_to_host`, { qos: 0 });
             showToast('Phòng đã mở!', `Mã phòng: ${pin} — Chia sẻ cho các lớp`, 'success');
         } else {
+            loadQueueLocal();
             switchToMainApp();
             updateStatus('Đang đồng bộ...', 'yellow');
             mqttClient.subscribe(`${roomTopic}/host_to_client`, { qos: 0 });
@@ -418,6 +421,18 @@ function handleDataPacket(packet) {
     switch (packet.type) {
         case 'SYNC_FULL':
             violationsData = Array.isArray(packet.data) ? packet.data : [];
+            if (!isHost) {
+                const syncedIds = new Set(violationsData.map(v => v.id));
+                const oldLen = pendingQueue.length;
+                pendingQueue = pendingQueue.filter(v => !syncedIds.has(v.id));
+                if (pendingQueue.length < oldLen) saveQueueLocal();
+                
+                if (pendingQueue.length > 0) {
+                    const newPending = pendingQueue.filter(v => !syncedIds.has(v.id));
+                    violationsData = [...violationsData, ...newPending];
+                    setTimeout(checkAndSyncQueue, 1500);
+                }
+            }
             renderReport();
             if (isHost) saveDataLocal();
             break;
@@ -453,10 +468,24 @@ function handleDataPacket(packet) {
 function sendData(packet) {
     if (isHost) {
         handleDataPacket(packet);
-    } else if (mqttClient && mqttClient.connected) {
-        publish(`${roomTopic}/client_to_host`, packet);
     } else {
-        showToast('Chưa kết nối', 'Vui lòng kết nối lại với máy chủ', 'error');
+        if (packet.type === 'ADD_ITEMS') {
+            pendingQueue = [...pendingQueue, ...packet.items];
+            saveQueueLocal();
+            
+            const existingIds = new Set(violationsData.map(v => v.id));
+            const uniqueNew = packet.items.filter(v => !existingIds.has(v.id));
+            violationsData = [...violationsData, ...uniqueNew];
+            renderReport();
+            
+            checkAndSyncQueue();
+        } else {
+            if (mqttClient && mqttClient.connected) {
+                publish(`${roomTopic}/client_to_host`, packet);
+            } else {
+                showToast('Chưa kết nối', 'Cần có mạng để thao tác sửa/xoá trực tiếp', 'error');
+            }
+        }
     }
 }
 
@@ -480,6 +509,30 @@ function loadDataLocal() {
             console.warn('Dữ liệu local storage bị hỏng, xóa...', e);
             localStorage.removeItem(HOST_DATA_KEY);
         }
+    }
+}
+
+function saveQueueLocal() {
+    if (!isHost) localStorage.setItem(CLIENT_QUEUE_KEY, JSON.stringify(pendingQueue));
+}
+
+function loadQueueLocal() {
+    if (!isHost) {
+        const saved = localStorage.getItem(CLIENT_QUEUE_KEY);
+        if (saved) {
+            try { pendingQueue = JSON.parse(saved); }
+            catch(e) { pendingQueue = []; }
+        }
+    }
+}
+
+function checkAndSyncQueue() {
+    if (isHost || pendingQueue.length === 0) return;
+    if (mqttClient && mqttClient.connected) {
+        publish(`${roomTopic}/client_to_host`, { type: 'ADD_ITEMS', items: pendingQueue });
+        showToast('Đồng bộ mạng', `Đang gửi ${pendingQueue.length} vi phạm lưu nháp lên Host...`, 'info', 3000);
+    } else {
+        showToast('Lưu nháp', `Đã lưu tạm ${pendingQueue.length} vi phạm vào máy, sẽ tự đồng bộ khi có mạng.`, 'warning');
     }
 }
 
@@ -1184,5 +1237,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e) {
             localStorage.removeItem(HOST_SESSION_KEY);
         }
+    }
+});
+
+// ============================================================
+//  PROTECT HOST SESSION
+// ============================================================
+window.addEventListener('beforeunload', (e) => {
+    if (isHost && connections.length > 0) {
+        const msg = 'Bạn đang đóng vai trò Máy chủ. Xoá trang sẽ ngắt kết nối các máy khác!';
+        e.returnValue = msg;
+        return msg;
     }
 });
