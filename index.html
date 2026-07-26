@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' https://files.catbox.moe data: blob:; connect-src 'self' https://unpkg.com https://cdn.jsdelivr.net wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
     <title>Trợ Lý Giám Thị AI | Hệ Thống Trực Nề Nếp</title>
     <meta name="description" content="Hệ thống quản lý trực nề nếp thông minh, kết nối thời gian thực qua MQTT cho các lớp học.">
     <link rel="icon" href="https://files.catbox.moe/jyg7qk.webp">
@@ -14,10 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
-    <!-- Libraries (NO Tailwind CDN) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+    <!-- MQTT is needed at login; other large libraries are loaded only when used. -->
     <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 
     <!-- Custom CSS (complete, no Tailwind dependency) -->
@@ -45,16 +44,16 @@
                 <h1 class="login-title">Hệ Thống Trực Nề Nếp</h1>
                 <p class="login-version-badge">
                     <i class="fa-solid fa-circle fa-2xs anim-pulse"></i>
-                    Phiên bản 3.0 — Real-time Sync
+                    Phiên bản 4.0 — Secure Real-time Sync
                 </p>
             </div>
 
             <!-- Tabs -->
             <div class="tab-container">
-                <button onclick="switchTab('create')" id="tab-create" class="tab-btn active">
+                <button id="tab-create" class="tab-btn active" data-tab="create">
                     <i class="fa-solid fa-server"></i> Tạo Máy Chủ
                 </button>
-                <button onclick="switchTab('join')" id="tab-join" class="tab-btn">
+                <button id="tab-join" class="tab-btn" data-tab="join">
                     <i class="fa-solid fa-link"></i> Kết Nối
                 </button>
             </div>
@@ -69,28 +68,24 @@
                     <p class="section-label">Danh tính Giám Thị</p>
                     <select id="host-name" class="form-input">
                         <option value="">— Chọn danh tính —</option>
-                        <option value="12A1 - Hồ Tiến Phát">12A1 — Hồ Tiến Phát</option>
-                        <option value="12A2 - Đỗ Hữu Tính">12A2 — Đỗ Hữu Tính</option>
-                        <option value="12A3 - Phạm Lê Minh Hiếu">12A3 — Phạm Lê Minh Hiếu</option>
-                        <option value="12A4 - Lớp Trưởng">12A4 — Lớp Trưởng</option>
-                        <option value="12A5 - Lê Văn Huyền">12A5 — Lê Văn Huyền</option>
-                        <option value="12A6 - Giàng A Thánh">12A6 — Giàng A Thánh</option>
-                        <option value="11B1 - Vũ Thị Vân Anh">11B1 — Vũ Thị Vân Anh</option>
-                        <option value="10C3 - Trần Văn Mạnh">10C3 — Trần Văn Mạnh</option>
-                        <option value="Tổ Giám Thị - Phan Thị Thuý">Tổ Giám Thị — Phan Thị Thuý</option>
+                        <option value="Tổ Giám Thị">Tổ Giám Thị</option>
                     </select>
                 </div>
                 <button id="btn-create-room" class="btn btn-primary btn-full">
                     <i class="fa-solid fa-wifi"></i> Khởi động Máy Chủ
+                </button>
+                <button id="resume-host-btn" class="btn btn-ghost btn-full d-none">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Khôi phục phòng Host gần nhất
                 </button>
             </div>
 
             <!-- Join Room Form -->
             <div id="form-join" class="form-group-stack d-none">
                 <div>
-                    <p class="section-label">Mã Phòng (6 chữ số)</p>
-                    <input type="number" id="join-pin" class="form-input form-input--pin"
-                        placeholder="• • • • • •" maxlength="6">
+                    <p class="section-label">Mã phòng (12 ký tự)</p>
+                    <input type="text" id="join-pin" class="form-input form-input--invite"
+                        placeholder="ABCD-EFGH-JKLM" maxlength="240" autocomplete="off" spellcheck="false">
+                    <p class="field-note">Có thể đọc theo 3 nhóm, không phân biệt chữ hoa/thường. Không đăng công khai.</p>
                 </div>
                 <div>
                     <p class="section-label">Vai trò / Lớp</p>
@@ -122,7 +117,7 @@
 
             <div class="contact-info" style="margin-top:24px;">
                 <i class="fa-regular fa-circle-question"></i>
-                <strong>Liên hệ lấy mật khẩu:</strong> Tổ giám thị hoặc Hồ Tiến Phát — 12A1
+                <strong>Liên hệ lấy mật khẩu:</strong> Tổ Giám Thị
             </div>
         </div>
     </div>
@@ -149,11 +144,11 @@
             </div>
 
             <div class="header-actions">
-                <div id="pin-container" class="pin-box d-none" onclick="copyPin()" title="Click để sao chép">
-                    <span class="pin-label">Mã Phòng</span>
+                <button id="pin-container" class="pin-box d-none" title="Nhấn để sao chép mã phòng">
+                    <span class="pin-label">Mã phòng</span>
                     <span id="display-pin" class="pin-display">------</span>
                     <span class="pin-copy-hint"><i class="fa-regular fa-copy"></i> Copy</span>
-                </div>
+                </button>
                 <div class="clock-display">
                     <i class="fa-regular fa-clock" style="color:#60a5fa;font-size:12px;"></i>
                     <span id="realtime-clock">00:00:00</span>
@@ -233,6 +228,9 @@
                             <p style="font-size:11px;color:#475569;margin-top:4px;">Hỗ trợ .xlsx, .xls</p>
                         </div>
                     </div>
+                    <button id="template-excel-btn" class="btn btn-ghost btn-full compact-btn">
+                        <i class="fa-solid fa-download"></i> Tải file Excel mẫu
+                    </button>
                 </div>
 
                 <!-- Export -->
@@ -247,6 +245,15 @@
                         <button id="export-excel-btn" class="btn export-btn-emerald">
                             <i class="fa-solid fa-file-excel"></i> Xuất Excel
                         </button>
+                    </div>
+                    <div class="export-grid export-grid-spaced">
+                        <button id="backup-json-btn" class="btn btn-ghost compact-btn">
+                            <i class="fa-solid fa-box-archive"></i> Backup JSON
+                        </button>
+                        <label for="restore-json-input" class="btn btn-ghost compact-btn">
+                            <i class="fa-solid fa-clock-rotate-left"></i> Phục hồi JSON
+                        </label>
+                        <input type="file" id="restore-json-input" accept="application/json,.json" class="d-none">
                     </div>
                 </div>
             </div>
@@ -266,7 +273,18 @@
                             <button id="clear-all-btn" class="btn btn-danger d-none clear-btn">
                                 <i class="fa-solid fa-trash"></i> Xóa Tất Cả
                             </button>
+                            <button id="undo-clear-btn" class="btn btn-ghost d-none clear-btn">
+                                <i class="fa-solid fa-rotate-left"></i> Hoàn tác xóa
+                            </button>
                         </div>
+
+                        <div class="report-tools">
+                            <input id="search-input" class="form-input filter-input" type="search" maxlength="100" placeholder="Tìm tên / người báo...">
+                            <select id="class-filter" class="form-input filter-input"><option value="">Tất cả lớp</option></select>
+                            <select id="violation-filter" class="form-input filter-input"><option value="">Tất cả vi phạm</option></select>
+                            <span id="pending-badge" class="pending-badge d-none">0 đang chờ</span>
+                        </div>
+                        <div id="stats-summary" class="stats-summary" aria-live="polite"></div>
 
                         <div style="position:relative;">
                             <button id="toggle-display-btn" class="btn btn-ghost display-settings-btn">
@@ -360,10 +378,10 @@
                 </div>
             </div>
             <div class="modal-actions">
-                <button onclick="closeEditModal()" class="btn btn-ghost modal-action-btn">
+                <button id="cancel-edit-btn" class="btn btn-ghost modal-action-btn">
                     <i class="fa-solid fa-xmark"></i> Hủy
                 </button>
-                <button onclick="saveEdit()" class="btn btn-primary modal-action-btn">
+                <button id="save-edit-btn" class="btn btn-primary modal-action-btn">
                     <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
                 </button>
             </div>
@@ -379,12 +397,13 @@
             <h4 class="toast-title" id="toast-title">Thông báo</h4>
             <p class="toast-message" id="toast-message">Nội dung</p>
         </div>
-        <button onclick="document.getElementById('toast').classList.remove('show')" class="toast-close-btn">
+        <button id="toast-close-btn" class="toast-close-btn">
             <i class="fa-solid fa-xmark"></i>
         </button>
         <div id="toast-progress" class="toast-progress" style="background:#3b82f6;"></div>
     </div>
 
+    <script src="app-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
