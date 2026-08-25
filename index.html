@@ -5,15 +5,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' https://files.catbox.moe data: blob:; connect-src 'self' https://unpkg.com https://cdn.jsdelivr.net wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' https://files.catbox.moe data: blob:; connect-src 'self' https://unpkg.com https://cdn.jsdelivr.net wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
     <title>Trợ Lý Giám Thị AI | Hệ Thống Trực Nề Nếp</title>
-    <meta name="description" content="Hệ thống quản lý trực nề nếp thông minh, kết nối thời gian thực qua MQTT cho các lớp học.">
-    <link rel="icon" href="https://files.catbox.moe/jyg7qk.webp">
+    <meta name="description"
+        content="Hệ thống quản lý trực nề nếp thông minh, kết nối thời gian thực qua MQTT cho các lớp học.">
+    <link rel="icon" href="./element/logo.png">
 
     <!-- Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
     <!-- MQTT is needed at login; other large libraries are loaded only when used. -->
@@ -39,7 +43,7 @@
             <!-- Logo & Title -->
             <div class="login-logo-section">
                 <div class="logo-container">
-                    <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo" class="logo-img">
+                    <img src="./element/logo.png" alt="Logo" class="logo-img">
                 </div>
                 <h1 class="login-title">Hệ Thống Trực Nề Nếp</h1>
                 <p class="login-version-badge">
@@ -67,8 +71,13 @@
                 <div>
                     <p class="section-label">Danh tính Giám Thị</p>
                     <select id="host-name" class="form-input">
-                        <option value="">— Chọn danh tính —</option>
-                        <option value="Tổ Giám Thị">Tổ Giám Thị</option>
+                        <option value="">— Chọn danh tính Giám Thị —</option>
+                        <option value="Tổ Giám Thị" selected>Tổ Giám Thị</option>
+                        <option value="Giám Thị Trưởng">Giám Thị Trưởng</option>
+                        <option value="Thầy Trực Ban">Thầy Trực Ban</option>
+                        <option value="Cô Trực Ban">Cô Trực Ban</option>
+                        <option value="Đoàn Trường">Đoàn Trường</option>
+                        <option value="Ban Giám Hiệu">Ban Giám Hiệu</option>
                     </select>
                 </div>
                 <button id="btn-create-room" class="btn btn-primary btn-full">
@@ -82,24 +91,29 @@
             <!-- Join Room Form -->
             <div id="form-join" class="form-group-stack d-none">
                 <div>
-                    <p class="section-label">Mã phòng (12 ký tự)</p>
-                    <input type="text" id="join-pin" class="form-input form-input--invite"
-                        placeholder="ABCD-EFGH-JKLM" maxlength="240" autocomplete="off" spellcheck="false">
-                    <p class="field-note">Có thể đọc theo 3 nhóm, không phân biệt chữ hoa/thường. Không đăng công khai.</p>
+                    <p class="section-label">Mã phòng (12 chữ số)</p>
+                    <input type="text" id="join-pin" class="form-input form-input--invite" placeholder="0123-4567-8901"
+                        maxlength="240" autocomplete="off" spellcheck="false" inputmode="numeric">
+                    <p class="field-note">Đọc theo 3 nhóm 4 số. Không đăng công khai.</p>
                 </div>
                 <div>
                     <p class="section-label">Vai trò / Lớp</p>
                     <select id="join-role" class="form-input">
                         <option value="">— Chọn vai trò / Lớp —</option>
                         <option value="MONITOR">Giám thị phụ</option>
-                        <option value="12A1">Lớp 12A1</option>
-                        <option value="12A2">Lớp 12A2</option>
-                        <option value="12A3">Lớp 12A3</option>
-                        <option value="12A4">Lớp 12A4</option>
-                        <option value="12A5">Lớp 12A5</option>
-                        <option value="12A6">Lớp 12A6</option>
-                        <option value="11B1">Lớp 11B1</option>
-                        <option value="10C3">Lớp 10C3</option>
+                        <option value="Đội trực cổng">Đội trực cổng</option>
+                        <option value="Đội Cờ Đỏ">Đội Cờ Đỏ</option>
+                        <option value="Ban Thi Đua">Ban Thi Đua</option>
+                        <optgroup label="Các lớp">
+                            <option value="12A1">Lớp 12A1</option>
+                            <option value="12A2">Lớp 12A2</option>
+                            <option value="12A3">Lớp 12A3</option>
+                            <option value="12A4">Lớp 12A4</option>
+                            <option value="12A5">Lớp 12A5</option>
+                            <option value="12A6">Lớp 12A6</option>
+                            <option value="11B1">Lớp 11B1</option>
+                            <option value="10C3">Lớp 10C3</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div id="password-field" class="d-none">
@@ -129,7 +143,7 @@
         <header class="app-header">
             <div class="header-identity">
                 <div class="header-logo-wrap">
-                    <img src="https://files.catbox.moe/jyg7qk.webp" alt="Logo" class="header-logo-img">
+                    <img src="./element/logo.png" alt="Logo" class="header-logo-img">
                 </div>
                 <div>
                     <div class="header-name-row">
@@ -191,13 +205,13 @@
                         <input type="file" id="ocr-input" accept="image/*" style="display:none;">
                         <div class="input-hint">
                             <i class="fa-solid fa-lightbulb" style="color:rgba(234,179,8,.6);"></i>
-                            VD: <span style="font-family:var(--font-mono);color:#94a3b8;">12A1 Nguyễn Văn A - muon</span>
+                            VD: <span style="font-family:var(--font-mono);color:#94a3b8;">12A1 Nguyễn Văn A -
+                                muon</span>
                         </div>
                     </div>
 
                     <textarea id="text-input" rows="6" class="main-textarea custom-scrollbar"
-                        placeholder="Nhập danh sách vi phạm...&#10;VD: 12a1 Nguyễn Văn A đi muộn&#10;     12a2 Trần Thị B - không đeo thẻ"
-                    ></textarea>
+                        placeholder="Nhập danh sách vi phạm...&#10;VD: 12a1 Nguyễn Văn A đi muộn&#10;     12a2 Trần Thị B - không đeo thẻ"></textarea>
 
                     <div id="ocr-loading" class="ocr-loading-box d-none">
                         <div class="ocr-status-row">
@@ -223,8 +237,10 @@
                         <input type="file" id="excel-input" accept=".xlsx,.xls"
                             style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:10;">
                         <div style="pointer-events:none;text-align:center;">
-                            <i class="fa-solid fa-cloud-arrow-up" style="font-size:24px;color:#64748b;display:block;margin-bottom:8px;"></i>
-                            <p style="font-size:12px;color:#94a3b8;">Kéo thả hoặc <span style="color:#60a5fa;font-weight:600;">chọn file</span></p>
+                            <i class="fa-solid fa-cloud-arrow-up"
+                                style="font-size:24px;color:#64748b;display:block;margin-bottom:8px;"></i>
+                            <p style="font-size:12px;color:#94a3b8;">Kéo thả hoặc <span
+                                    style="color:#60a5fa;font-weight:600;">chọn file</span></p>
                             <p style="font-size:11px;color:#475569;margin-top:4px;">Hỗ trợ .xlsx, .xls</p>
                         </div>
                     </div>
@@ -279,9 +295,14 @@
                         </div>
 
                         <div class="report-tools">
-                            <input id="search-input" class="form-input filter-input" type="search" maxlength="100" placeholder="Tìm tên / người báo...">
-                            <select id="class-filter" class="form-input filter-input"><option value="">Tất cả lớp</option></select>
-                            <select id="violation-filter" class="form-input filter-input"><option value="">Tất cả vi phạm</option></select>
+                            <input id="search-input" class="form-input filter-input" type="search" maxlength="100"
+                                placeholder="Tìm tên / người báo...">
+                            <select id="class-filter" class="form-input filter-input">
+                                <option value="">Tất cả lớp</option>
+                            </select>
+                            <select id="violation-filter" class="form-input filter-input">
+                                <option value="">Tất cả vi phạm</option>
+                            </select>
                             <span id="pending-badge" class="pending-badge d-none">0 đang chờ</span>
                         </div>
                         <div id="stats-summary" class="stats-summary" aria-live="polite"></div>
@@ -311,7 +332,8 @@
                                 </label>
                                 <label class="display-menu-item">
                                     <input type="checkbox" id="show-reporter" checked style="accent-color:#3b82f6;">
-                                    <i class="fa-solid fa-user-shield" style="font-size:11px;color:#64748b;width:12px;"></i>
+                                    <i class="fa-solid fa-user-shield"
+                                        style="font-size:11px;color:#64748b;width:12px;"></i>
                                     <span>Người báo</span>
                                 </label>
                             </div>
@@ -372,7 +394,8 @@
                     </div>
                     <div>
                         <p class="section-label">Lỗi vi phạm</p>
-                        <input type="text" id="edit-violation" list="violation-suggestions" class="form-input" placeholder="Loại lỗi">
+                        <input type="text" id="edit-violation" list="violation-suggestions" class="form-input"
+                            placeholder="Loại lỗi">
                         <datalist id="violation-suggestions"></datalist>
                     </div>
                 </div>
@@ -403,7 +426,59 @@
         <div id="toast-progress" class="toast-progress" style="background:#3b82f6;"></div>
     </div>
 
+    <!-- EXPORT TEMPLATE -->
+    <div id="export-template" class="export-template">
+        <div class="export-header">
+            <div class="export-logo-container">
+                <img src="./element/logo.png" alt="Logo" class="export-logo">
+            </div>
+            <div class="export-agency-info">
+                <p class="export-agency-title">SỞ GIÁO DỤC VÀ ĐÀO TẠO LÂM ĐỒNG</p>
+                <p class="export-agency-name">TRUNG TÂM GDTX - NGOẠI NGỮ, TIN HỌC TỈNH LÂM ĐỒNG</p>
+                <p class="export-agency-line">-------------------</p>
+            </div>
+            <div class="export-republic-info">
+                <p class="export-republic-title">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+                <p class="export-republic-motto">Độc lập - Tự do - Hạnh phúc</p>
+                <p class="export-republic-line">-------------------</p>
+            </div>
+        </div>
+
+        <div class="export-title-section">
+            <h2 class="export-main-title">DANH SÁCH HỌC VIÊN VI PHẠM NỘI QUY</h2>
+            <p id="export-time" class="export-time"></p>
+        </div>
+
+        <table class="export-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">STT</th>
+                    <th style="width: 100px;">Thời gian</th>
+                    <th style="width: 250px;">Họ và Tên</th>
+                    <th style="width: 80px;">Lớp</th>
+                    <th>Lỗi vi phạm</th>
+                    <th style="width: 150px;">Người báo</th>
+                </tr>
+            </thead>
+            <tbody id="export-table-body">
+                <!-- Rows injected via JS -->
+            </tbody>
+        </table>
+
+        <div class="export-footer">
+            <div class="export-signature">
+                <p class="export-signature-title">NGƯỜI LẬP BẢNG</p>
+                <p class="export-signature-note">(Ký, ghi rõ họ tên)</p>
+            </div>
+            <div class="export-signature">
+                <p class="export-signature-title">GIÁM THỊ TRỰC</p>
+                <p class="export-signature-note">(Ký, ghi rõ họ tên)</p>
+            </div>
+        </div>
+    </div>
+
     <script src="app-config.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>
