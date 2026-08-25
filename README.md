@@ -15,12 +15,12 @@ Mở URL localhost do lệnh trên hiển thị. Có thể dùng `python -m http
 ## Vận hành
 
 1. Host chọn danh tính và tạo phòng.
-2. Host đọc hoặc sao chép mã phòng 12 ký tự, ví dụ `ABCD-EFGH-JKLM`, và gửi riêng cho Client.
+2. Host đọc hoặc sao chép mã phòng 12 chữ số, ví dụ `0123-4567-8901`, và gửi riêng cho Client.
 3. Client nhập hoặc dán mã phòng, chọn vai trò, nhập tên và kết nối.
 4. Client chỉ vào màn hình chính sau khi Host gửi ACK/SYNC. Nếu Host không phản hồi trong 15 giây, ứng dụng báo timeout rõ ràng.
 5. Giữ tab Host mở. MQTT tự kết nối lại đúng broker được mã hóa trong ký tự đầu của mã phòng.
 
-Mã phòng được chia thành ba nhóm để dễ đọc qua điện thoại hoặc ghi tay; không dùng `0`, `O`, `1`, `I` để tránh nhầm. Ứng dụng dẫn xuất ID phòng và khóa AES-GCM từ mã bằng SHA-256. Không đăng mã lên nhóm hoặc trang công khai. Phần mật khẩu lớp trong giao diện chỉ là rào cản tiện dụng ở frontend, không phải cơ chế xác thực an toàn vì mã nguồn web luôn có thể xem được.
+Mã phòng gồm 12 chữ số được chia thành ba nhóm 4 số để dễ đọc qua điện thoại hoặc ghi tay. Ứng dụng dẫn xuất ID phòng và khóa AES-GCM từ mã bằng SHA-256. Không đăng mã lên nhóm hoặc trang công khai. Phần mật khẩu lớp trong giao diện chỉ là rào cản tiện dụng ở frontend, không phải cơ chế xác thực an toàn vì mã nguồn web luôn có thể xem được.
 
 ## Dữ liệu, queue và backup
 
