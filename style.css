@@ -1,6 +1,6 @@
 /* ============================================
    TRỢ LÝ GIÁM THỊ AI - PREMIUM DESIGN SYSTEM
-   Version 3.0 - Ultra Modern UI
+   Version 4.0 - Ultra Modern UI
    ============================================ */
 
 /* Fonts loaded via <link> in HTML — no @import needed */
@@ -27,7 +27,7 @@
     --text-secondary: #94a3b8;
     --text-muted: #475569;
     
-    --font-main: 'Be Vietnam Pro', system-ui, sans-serif;
+    --font-main: 'Roboto', Arial, Helvetica, sans-serif;
     --font-mono: 'JetBrains Mono', 'Courier New', monospace;
     
     --border-radius-sm: 8px;
@@ -507,6 +507,12 @@ select.form-input option {
     background: linear-gradient(135deg, #2563eb, #7c3aed);
     color: white;
     box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+
+.role-badge-client {
+    background: linear-gradient(135deg, #059669, #0d9488);
+    color: white;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.4);
 }
 
 /* ========== Status Indicators ========== */
@@ -1678,3 +1684,149 @@ select.form-input option {
     .pin-box { max-width: 180px; align-items: flex-start; }
     .pin-display { font-size: 13px; letter-spacing: .03em; }
 }
+
+/* EXPORT TEMPLATE STYLES */
+.export-template {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+    width: 210mm; /* A4 width */
+    background: white;
+    color: black;
+    padding: 20mm;
+    font-family: "Times New Roman", Times, serif;
+    box-sizing: border-box;
+    z-index: -100;
+}
+
+.export-template.export-active {
+    top: 0;
+    left: 0;
+    z-index: 10000;
+}
+
+.export-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.export-logo-container {
+    width: 100px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.export-logo {
+    max-width: 100px;
+    max-height: 100px;
+}
+
+.export-agency-info {
+    flex: 1;
+    font-size: 13pt;
+    padding: 0 10px;
+}
+
+.export-agency-title {
+    margin: 0;
+}
+
+.export-agency-name {
+    margin: 5px 0 0 0;
+    font-weight: bold;
+}
+
+.export-agency-line {
+    margin: 5px 0 0 0;
+    font-weight: bold;
+}
+
+.export-republic-info {
+    flex: 1;
+    font-size: 13pt;
+}
+
+.export-republic-title {
+    margin: 0;
+    font-weight: bold;
+}
+
+.export-republic-motto {
+    margin: 5px 0 0 0;
+    font-weight: bold;
+}
+
+.export-republic-line {
+    margin: 5px 0 0 0;
+    font-weight: bold;
+}
+
+.export-title-section {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.export-main-title {
+    font-size: 18pt;
+    font-weight: bold;
+    margin: 0;
+}
+
+.export-time {
+    font-size: 13pt;
+    margin: 10px 0 0 0;
+    font-style: italic;
+}
+
+.export-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+    font-size: 13pt;
+}
+
+.export-table th, .export-table td {
+    border: 1px solid black;
+    padding: 8px;
+}
+
+.export-table th {
+    font-weight: bold;
+    text-align: center;
+    background-color: #f2f2f2;
+}
+
+.export-table td {
+    text-align: left;
+}
+
+.export-table td.text-center {
+    text-align: center;
+}
+
+.export-footer {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 50px;
+}
+
+.export-signature {
+    text-align: center;
+}
+
+.export-signature-title {
+    font-size: 13pt;
+    font-weight: bold;
+    margin: 0;
+}
+
+.export-signature-note {
+    font-size: 11pt;
+    font-style: italic;
+    margin: 5px 0 0 0;
+}
+
