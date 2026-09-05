@@ -1,92 +1,75 @@
-# Trợ lý Giám thị - web tĩnh v4
+# Trợ lý Giám thị - Offline-First PWA & WebRTC P2P (v5.0)
 
-Ứng dụng quản lý vi phạm chạy hoàn toàn ở trình duyệt, không có backend riêng và không cần build. Host giữ dữ liệu chính trong `localStorage`; các máy Client trao đổi thời gian thực qua WebSocket MQTT công cộng.
+Ứng dụng quản lý nề nếp trường học chạy hoàn toàn ở trình duyệt, không có backend riêng, không cần build và **vận hành trọn đời với chi phí 0 VNĐ**.
+
+Phiên bản 5.0 nâng cấp toàn diện: hỗ trợ **Progressive Web App (PWA) Offline-First**, lưu trữ bền bỉ với **IndexedDB (500MB+)**, kênh truyền dự phòng ngang hàng **WebRTC DataChannel P2P**, **AI Cục bộ gợi ý học sinh & phát hiện tái phạm**, cùng cơ chế **tự động sao lưu Cloud cá nhân Google Drive / xuất chuẩn SMAS - VnEdu**.
+
+---
+
+## Tính Năng Nổi Bật v5.0 (100% Miễn Phí - 0 VNĐ)
+
+1. **PWA & Offline-First**: Cài đặt ứng dụng trực tiếp lên màn hình chính điện thoại (iOS, Android) hoặc máy tính Windows/Mac. Sử dụng Service Worker (`sw.js`) để hoạt động mượt mà kể cả khi mất kết nối mạng.
+2. **Lưu trữ IndexedDB (Dung lượng lớn)**: Nâng cấp từ `localStorage` lên `IndexedDB` chuẩn trình duyệt, nâng hạn mức lưu trữ lên tới hàng chục nghìn bản ghi (500MB+), tự động di chuyển (migration) dữ liệu cũ không làm mất bản ghi.
+3. **Kênh truyền kép WebRTC DataChannel P2P**: Báo hiệu qua MQTT và tự động thiết lập kết nối ngang hàng trực tiếp giữa Client và Host qua STUN server miễn phí của Google (`stun:stun.l.google.com:19302`). Độ trễ truyền dữ liệu gần như bằng 0 trong mạng Wi-Fi trường học. Tự động chuyển đổi mượt mà với MQTT khi có sự cố.
+4. **Local On-Device AI (Không tốn tiền API)**:
+   - **AI Roster & Gợi ý Thông Minh**: Nạp danh sách học sinh toàn trường từ Excel; khi gõ hoặc đọc giọng nói `12A1 An trễ`, AI tự động gợi ý chính xác học sinh `Nguyễn Văn An`, chống nhập sai tên.
+   - **Cảnh báo Tái Phạm (Repeat Offender Detector)**: Tự động phân tích tần suất vi phạm của học sinh và gắn huy hiệu cảnh báo (`Tái phạm 2x`, `Tái phạm 3x`).
+5. **Sao lưu Cloud Cá nhân & Xuất Chuẩn VnEdu / SMAS**:
+   - Tự động tạo snapshot sao lưu định kỳ trong IndexedDB.
+   - Hỗ trợ kết nối Google Drive cá nhân qua Client OAuth2 để sao lưu 1-click vào Drive của người dùng (0đ chi phí cloud).
+   - Xuất file Excel chuẩn cấu trúc đối soát phần mềm quản lý trường học **SMAS** và **VnEdu**.
+
+---
 
 ## Chạy ứng dụng
 
-Không nên mở trực tiếp bằng `file://` vì Web Crypto, Clipboard, worker OCR và một số trình duyệt sẽ hạn chế tính năng. Dùng một static server tại thư mục dự án:
+Không nên mở trực tiếp bằng `file://` vì Web Crypto, Clipboard, Service Worker và worker OCR sẽ bị trình duyệt hạn chế. Dùng một static server tại thư mục dự án:
 
+```powershell
+python -m http.server 8080
+```
+hoặc nếu máy có Node.js:
 ```powershell
 npx --yes serve .
 ```
 
-Mở URL localhost do lệnh trên hiển thị. Có thể dùng `python -m http.server 8080` nếu máy đã cài Python.
+Mở URL `http://localhost:8080` trên trình duyệt Chrome, Edge hoặc Safari.
+
+---
 
 ## Vận hành
 
-1. Host chọn danh tính và tạo phòng.
-2. Host đọc hoặc sao chép mã phòng 12 chữ số, ví dụ `0123-4567-8901`, và gửi riêng cho Client.
-3. Client nhập hoặc dán mã phòng, chọn vai trò, nhập tên và kết nối.
-4. Client chỉ vào màn hình chính sau khi Host gửi ACK/SYNC. Nếu Host không phản hồi trong 15 giây, ứng dụng báo timeout rõ ràng.
-5. Giữ tab Host mở. MQTT tự kết nối lại đúng broker được mã hóa trong ký tự đầu của mã phòng.
+1. **Host (Máy Chủ Giám Thị)**: Chọn danh tính và nhấn **Khởi động Máy Chủ**.
+2. **Chia sẻ mã phòng**: Host đọc hoặc sao chép mã phòng 12 chữ số (ví dụ `0123-4567-8901`) cho các đội trực / lớp.
+3. **Client (Đội trực / Lớp)**: Nhập mã phòng, chọn vai trò và nhấn **Kết Nối Ngay**.
+4. **Kết nối kép tự động**: Hệ thống đồng bộ qua MQTT và tự động mở kênh trực tiếp **WebRTC DataChannel P2P** giữa Client và Host khi điều kiện mạng cho phép (hiển thị huy hiệu `P2P Direct`).
+5. **Nạp danh sách học sinh (AI Roster)**: Nhấn biểu tượng danh bạ trên thanh công cụ để tải lên danh sách học sinh trường, kích hoạt gợi ý thông minh khi nhập liệu.
 
-Mã phòng gồm 12 chữ số được chia thành ba nhóm 4 số để dễ đọc qua điện thoại hoặc ghi tay. Ứng dụng dẫn xuất ID phòng và khóa AES-GCM từ mã bằng SHA-256. Không đăng mã lên nhóm hoặc trang công khai. Phần mật khẩu lớp trong giao diện chỉ là rào cản tiện dụng ở frontend, không phải cơ chế xác thực an toàn vì mã nguồn web luôn có thể xem được.
+---
 
-## Dữ liệu, queue và backup
+## Bảo mật và Tiêu chuẩn Mã nguồn
 
-- Dữ liệu Host, session Client và queue được namespace theo từng room.
-- Logout Host không xóa dữ liệu. Nút khôi phục phòng gần nhất cho phép mở lại cùng phòng và secret.
-- Queue Client lưu bền vững mọi thao tác thêm, sửa, xóa; mỗi thao tác có `operationId` và chỉ bị bỏ sau ACK của Host.
-- Host dedupe `operationId` và ID bản ghi, rồi phát SYNC chuẩn cho các Client.
-- Lần đầu tạo/khôi phục phòng v4, Host sao chép dữ liệu từ khóa v3 cũ vào phòng hiện tại và ghi dấu migration để không nhân bản sang các phòng mới. Dữ liệu v3 gốc không bị xóa.
-- Dùng **Backup JSON** thường xuyên, đặc biệt trước khi xóa nhiều hoặc đổi trình duyệt/máy.
-- **Phục hồi JSON** chỉ dành cho Host. Dữ liệu hiện tại được lưu thành snapshot trước khi phục hồi.
-- **Xóa tất cả** tạo snapshot cục bộ và có thể hoàn tác. Chỉ giữ ba snapshot gần nhất.
+- **Mã hóa đầu cuối (E2EE)**: Toàn bộ dữ liệu trao đổi đều được mã hóa bằng AES-GCM 256-bit với khóa dẫn xuất SHA-256 từ mã phòng.
+- **An toàn DOM**: Tuyệt đối không sử dụng `innerHTML` để loại bỏ nguy cơ DOM XSS.
+- **Sinh khóa an toàn**: Sử dụng `crypto.getRandomValues()`, không sử dụng `Math.random()`.
+- **Chính sách CSP nghiêm ngặt**: Kiểm soát chặt chẽ các nguồn script và kết nối mạng.
 
-`localStorage` không phải kho lưu trữ lâu dài: người dùng xóa dữ liệu website, chế độ riêng tư, lỗi ổ đĩa hoặc giới hạn quota đều có thể làm mất dữ liệu. Backup JSON ra file là biện pháp phục hồi chính.
-
-## Excel và tìm kiếm
-
-- Nút tải template tạo file mẫu ngay trên trình duyệt.
-- Import tìm header trong 10 dòng đầu, không phụ thuộc vị trí cột. Các header bắt buộc là Họ tên, Lớp và Lỗi vi phạm; có thể thêm Người báo, Thời gian.
-- Có tìm tên/người báo, lọc lớp, lọc loại vi phạm và thống kê số dòng/lớp/loại.
-- Lớp hợp lệ có dạng khối 10-12, một chữ cái và 1-2 chữ số, ví dụ `10A1`, `12B12`.
-
-## Giới hạn mặc định
-
-Các giới hạn nằm trong `app-config.js`:
-
-- 3.000 bản ghi mỗi phòng.
-- 200 dòng mỗi thao tác/import.
-- Payload logic 256 KiB.
-- Excel và JSON tối đa 5 MiB.
-- Ảnh OCR tối đa 8 MiB.
-- Queue Client giữ tối đa 500 thao tác hợp lệ khi nạp lại.
-
-Có thể thay danh sách broker và giới hạn trong `app-config.js`. Client không tự chọn broker dự phòng khác Host; broker được cố định trong mã phòng để hai phía luôn gặp nhau.
-
-## Bảo mật và giới hạn
-
-- Dữ liệu MQTT được mã hóa đầu cuối bằng AES-GCM với khóa dẫn xuất SHA-256 từ mã phòng ngẫu nhiên khi chạy trong secure context (`https://` hoặc localhost) và trình duyệt có Web Crypto.
-- Nếu Web Crypto không khả dụng, ứng dụng cảnh báo và dùng plaintext để vẫn vận hành. Không nên sử dụng fallback này cho dữ liệu thật.
-- Broker MQTT công cộng vẫn thấy metadata giao thông như topic, thời điểm và kích thước gói; broker có thể gián đoạn, giới hạn lưu lượng hoặc ngừng dịch vụ. Không có cam kết bảo mật hay độ sẵn sàng tuyệt đối.
-- Bất kỳ ai có mã phòng đều có thể dẫn xuất khóa và đọc/gửi payload trong phòng. Mã ngắn thực dụng hơn nhưng yếu hơn mã mời dài trước đây trước việc dò chủ động; không đăng công khai và nên tạo phòng mới theo mỗi ca trực. AES-GCM không thay thế quản lý danh tính, phân quyền server hoặc thu hồi khóa.
-- ACK xác nhận Host đã xử lý thao tác trong phiên. MQTT công cộng và `localStorage` không tạo thành hệ thống giao dịch có độ bền như cơ sở dữ liệu backend.
-- CSP giảm bề mặt chèn script nhưng trang vẫn phụ thuộc CDN cho font, icon, MQTT, Excel, PNG và OCR. Nếu CDN lỗi, tính năng tương ứng không hoạt động.
+---
 
 ## Triển khai miễn phí bằng GitHub Pages
 
-1. Đẩy repository lên GitHub bằng quy trình quản trị mã nguồn của bạn.
+1. Đẩy repository lên GitHub.
 2. Vào **Settings > Pages**.
-3. Chọn **Deploy from a branch**, branch cần triển khai và thư mục `/ (root)`.
-4. Mở URL `https://<tai-khoan>.github.io/<repo>/` sau khi Pages hoàn tất.
+3. Chọn **Deploy from a branch**, chọn nhánh chính và thư mục `/ (root)`.
+4. Mở URL `https://<tai-khoan>.github.io/<repo>/` sau khi Pages hoàn tất. GitHub Pages cung cấp HTTPS miễn phí để kích hoạt đầy đủ Web Crypto, PWA và Service Worker.
 
-GitHub Pages cung cấp HTTPS phù hợp cho Web Crypto. Không đưa backup, mã phòng hoặc dữ liệu thật vào repository.
+---
 
-## File chính
+## Cấu trúc Tệp tin
 
-- `index.html`: giao diện và CSP.
-- `style.css`: thiết kế hiện có cùng các thành phần lọc/trạng thái mới.
-- `app-config.js`: broker và giới hạn vận hành.
-- `script.js`: lưu trữ, validation, MQTT, mã hóa, queue/ACK, import/export.
-
-## Kiểm tra mã nguồn
-
-Không cần cài package để chạy các kiểm tra tĩnh hiện có:
-
-```powershell
-node --check script.js
-node --check app-config.js
-node tests/security.test.js
-git diff --check
-```
+- `index.html`: Giao diện ứng dụng, PWA links, AI Autocomplete UI, Roster & Cloud Modals, CSP.
+- `style.css`: Hệ thống thiết kế Dark Theme, hiệu ứng Glassmorphism, huy hiệu P2P/MQTT, AI chip.
+- `manifest.json`: Web App Manifest tiêu chuẩn PWA cài đặt trên thiết bị di động và máy tính.
+- `sw.js`: Service Worker quản lý vòng đời ứng dụng và lưu trữ bộ nhớ đệm Offline-First.
+- `app-config.js`: Cấu hình broker MQTT, WebRTC STUN servers, IndexedDB, hạn mức lưu trữ.
+- `script.js`: Toàn bộ logic lưu trữ IndexedDB, P2P DataChannel, AI Roster, E2EE AES-GCM, Offline Queue.
