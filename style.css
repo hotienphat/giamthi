@@ -1861,7 +1861,7 @@ select.form-input option {
 
 /* EXPORT TEMPLATE STYLES */
 .export-template {
-    position: absolute;
+    position: fixed;
     top: -9999px;
     left: -9999px;
     width: 210mm; /* A4 width */
@@ -1871,12 +1871,17 @@ select.form-input option {
     font-family: "Times New Roman", Times, serif;
     box-sizing: border-box;
     z-index: -100;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .export-template.export-active {
+    position: absolute;
     top: 0;
     left: 0;
     z-index: 10000;
+    visibility: visible;
+    pointer-events: auto;
 }
 
 .export-header {
@@ -2400,5 +2405,3 @@ select.form-input option {
     letter-spacing: 0.04em;
     flex-shrink: 0;
 }
-
-
