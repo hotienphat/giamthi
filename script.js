@@ -3,29 +3,43 @@
 const CONFIG = window.GIAMTHI_CONFIG || {};
 const BROKERS = Array.isArray(CONFIG.brokers) ? CONFIG.brokers : ['wss://broker.emqx.io:8084/mqtt'];
 const LIMITS = Object.assign({
-    maxRecords: 3000, maxItemsPerOperation: 200, maxPayloadBytes: 262144,
-    maxExcelBytes: 5242880, maxImageBytes: 8388608, maxJsonBytes: 5242880
+    maxRecords: 10000,
+    maxItemsPerOperation: 200,
+    maxPayloadBytes: 262144,
+    maxExcelBytes: 10485760,
+    maxImageBytes: 10485760,
+    maxJsonBytes: 10485760,
+    maxRosterStudents: 5000
 }, CONFIG.limits || {});
+
 const STORAGE_PREFIX = 'giamthi:v4';
 const LEGACY_DATA_KEY = 'GiamThiAI_v3_Data';
 const LEGACY_MIGRATION_KEY = `${STORAGE_PREFIX}:migration:v3`;
 const DISPLAY_KEY = `${STORAGE_PREFIX}:display`;
+const DB_NAME = CONFIG.indexedDB?.name || 'GiamThiDB_v4';
+const DB_VERSION = 2;
+
 const CLASS_PASSWORDS = {
     '12A1': '1231', '12A2': '1232', '12A3': '1233', '12A4': '1234',
     '12A5': '1235', '12A6': '1236', '11B1': '1131', '10C3': '1013'
 };
+
 const VIOLATION_MAP = {
     KHONG_MANG_THE: { label: 'Không mang thẻ học viên', keys: ['khong mang the', 'quen the', 'khong deo the', 'deo the', 'quang the', 'k the', 'ko the', 'mat the', 'thieu the', 'the hoc vien', 'the hoc sinh', 'the hs'] },
+    KHONG_PHU_HIEU: { label: 'Không đeo phù hiệu', keys: ['khong phu hieu', 'k phu hieu', 'ko phu hieu', 'phu hieu', 'quen phu hieu', 'thieu phu hieu'] },
+    SAI_DONG_PHUC: { label: 'Sai đồng phục', keys: ['sai dong phuc', 'khong dong phuc', 'k dong phuc', 'ko dong phuc', 'k dp', 'ko dp', 'dong phuc', 'dp', 'sai quan', 'sai ao', 'ao thun', 'quan jean'] },
     KHONG_MAC_AO_DAI: { label: 'Không mặc áo dài', keys: ['khong mac ao dai', 'mac sai ao dai', 'thieu ao dai', 'k ao dai', 'ko ao dai', 'ao dai', 'aodai', 'aod'] },
     KHONG_MAC_AO_DOAN: { label: 'Không mặc áo đoàn', keys: ['khong mac ao doan', 'thieu ao doan', 'k ao doan', 'ko ao doan', 'ao doan', 'aodoan'] },
+    VI_PHAM_ATGT: { label: 'Vi phạm ATGT (Mũ / Xe)', keys: ['khong mu bao hiem', 'k mu bao hiem', 'ko mu bao hiem', 'k mu', 'ko mu', 'k non', 'ko non', 'mu bao hiem', 'non bao hiem', 'chay xe', 'tren 50cc', '50cc', 'phan khoi', 'xe may', 'xe to', 'xe phan khoi lon'] },
     DI_XE_50CC: { label: 'Đi xe trên 50cc', keys: ['tren 50cc', '50cc', 'phan khoi', 'xe may', 'xe to', 'xe phan khoi lon'] },
     NHUOM_TOC: { label: 'Nhuộm tóc / Đầu tóc', keys: ['nhuom toc', 'dau toc', 'toc tai', 'toc nhuom', 'nhuom'] },
     KHONG_DONG_THUNG: { label: 'Không đóng thùng (Sơ vin)', keys: ['khong dong thung', 'chua so vin', 'khong so vin', 'k so vin', 'ko so vin', 'k dong thung', 'ko dong thung', 'dong thung', 'so vin', 'bo ao'] },
-    MANG_DEP_LE: { label: 'Mang dép lê', keys: ['mang dep', 'di dep', 'dep le', 'di dep le'] },
+    MANG_DEP_LE: { label: 'Mang dép lê', keys: ['mang dep', 'di dep', 'dep le', 'di dep le', 'khong mang giay', 'k giay', 'ko giay', 'dep to ong'] },
     DI_HOC_MUON: { label: 'Đi học muộn', keys: ['di hoc muon', 'di muon', 'di tre', 'hoc muon', 'muon', 'tre'] },
     KHONG_TRUC_NHAT: { label: 'Không trực nhật', keys: ['khong truc nhat', 'truc nhat', 've sinh', 'quet lop', 'chua truc nhat'] },
     SU_DUNG_DIEN_THOAI: { label: 'Sử dụng điện thoại', keys: ['dien thoai trong lop', 'choi dien thoai', 'dung dien thoai', 'dien thoai', 'dt trong lop'] }
 };
+
 const CLASS_REGEX = /\b(10|11|12)[A-Z][0-9]{1,2}\b/i;
 const ROOM_CODE_ALPHABET = '0123456789';
 const textEncoder = new TextEncoder();
@@ -54,6 +68,24 @@ let flushTimer = null;
 let renderTimer = null;
 let syncBroadcastTimer = null;
 let displaySettings = loadJson(DISPLAY_KEY, { time: true, name: true, class: true, reporter: true });
+
+// PWA & Offline
+let deferredPrompt = null;
+
+// IndexedDB instance & Roster cache
+let idbInstance = null;
+let schoolRoster = [];
+
+// WebRTC P2P DataChannel state
+let clientPeerConnection = null;
+let clientDataChannel = null;
+let hostPeerConnections = new Map(); // clientId -> RTCPeerConnection
+let hostDataChannels = new Map();    // clientId -> RTCDataChannel
+let isP2PConnected = false;
+
+// Auto backup tracking
+let lastAutoBackupTime = Date.now();
+let unbackedOperationsCount = 0;
 
 function byId(id) {
     return document.getElementById(id);
@@ -104,10 +136,322 @@ function saveJson(key, value) {
         localStorage.setItem(key, JSON.stringify(value));
         return true;
     } catch (error) {
-        showToast('Không thể lưu', 'Bộ nhớ trình duyệt đã đầy. Hãy backup rồi giảm dữ liệu.', 'error');
+        showToast('Bộ nhớ trình duyệt đầy', 'Dữ liệu đã được lưu vào IndexedDB an toàn.', 'warning');
         return false;
     }
 }
+
+/* =========================================================
+   1. INDEXEDDB STORAGE ENGINE (0 VNĐ - CAPACITY 500MB+)
+   ========================================================= */
+
+function openIndexedDB() {
+    if (idbInstance) return Promise.resolve(idbInstance);
+    return new Promise(resolve => {
+        if (!window.indexedDB) {
+            console.warn('[IndexedDB] Không hỗ trợ, dùng localStorage');
+            return resolve(null);
+        }
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = event => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('records')) {
+                const recordStore = db.createObjectStore('records', { keyPath: 'id' });
+                recordStore.createIndex('class', 'class', { unique: false });
+                recordStore.createIndex('violation', 'violation', { unique: false });
+                recordStore.createIndex('time', 'time', { unique: false });
+            }
+            if (!db.objectStoreNames.contains('meta')) {
+                db.createObjectStore('meta', { keyPath: 'key' });
+            }
+            if (!db.objectStoreNames.contains('roster')) {
+                const rosterStore = db.createObjectStore('roster', { keyPath: 'id' });
+                rosterStore.createIndex('class', 'class', { unique: false });
+                rosterStore.createIndex('cleanName', 'cleanName', { unique: false });
+            }
+        };
+        request.onsuccess = event => {
+            idbInstance = event.target.result;
+            resolve(idbInstance);
+        };
+        request.onerror = event => {
+            console.warn('[IndexedDB error]', event.target.error);
+            resolve(null);
+        };
+    });
+}
+
+async function idbGet(storeName, key) {
+    const db = await openIndexedDB();
+    if (!db) return null;
+    return new Promise(resolve => {
+        try {
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result ? (req.result.value ?? req.result) : null);
+            req.onerror = () => resolve(null);
+        } catch (e) {
+            resolve(null);
+        }
+    });
+}
+
+async function idbSet(storeName, item) {
+    const db = await openIndexedDB();
+    if (!db) return false;
+    return new Promise(resolve => {
+        try {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            store.put(item);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+async function idbGetAll(storeName) {
+    const db = await openIndexedDB();
+    if (!db) return [];
+    return new Promise(resolve => {
+        try {
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        } catch (e) {
+            resolve([]);
+        }
+    });
+}
+
+async function idbBulkSet(storeName, items) {
+    const db = await openIndexedDB();
+    if (!db || !Array.isArray(items)) return false;
+    return new Promise(resolve => {
+        try {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            items.forEach(item => store.put(item));
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+async function idbClear(storeName) {
+    const db = await openIndexedDB();
+    if (!db) return false;
+    return new Promise(resolve => {
+        try {
+            const tx = db.transaction(storeName, 'readwrite');
+            tx.objectStore(storeName).clear();
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+async function idbDelete(storeName, key) {
+    const db = await openIndexedDB();
+    if (!db) return false;
+    return new Promise(resolve => {
+        try {
+            const tx = db.transaction(storeName, 'readwrite');
+            tx.objectStore(storeName).delete(key);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
+    });
+}
+
+/* =========================================================
+   2. WEBRTC P2P DATACHANNEL (0 VNĐ PEER-TO-PEER BACKUP)
+   ========================================================= */
+
+const P2P_ICE_SERVERS = (CONFIG.webrtc?.iceServers) || [{ urls: 'stun:stun.l.google.com:19302' }];
+
+function updateTransportUI(mode) {
+    const badge = byId('transport-badge');
+    if (!badge) return;
+
+    if (mode === 'P2P') {
+        isP2PConnected = true;
+        badge.className = 'transport-badge transport-p2p';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-bolt';
+        badge.replaceChildren(icon, document.createTextNode(' P2P Direct'));
+        badge.title = 'Kênh truyền trực tiếp P2P (WebRTC DataChannel) siêu tốc độ 0 VNĐ';
+    } else {
+        isP2PConnected = false;
+        badge.className = 'transport-badge transport-mqtt';
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-tower-broadcast';
+        badge.replaceChildren(icon, document.createTextNode(' MQTT'));
+        badge.title = 'Kênh truyền WebSocket MQTT công cộng';
+    }
+}
+
+function initClientP2P() {
+    if (!window.RTCPeerConnection || isHost || !room?.clientId) return;
+    
+    try {
+        if (clientPeerConnection) {
+            clientPeerConnection.close();
+        }
+
+        clientPeerConnection = new RTCPeerConnection({ iceServers: P2P_ICE_SERVERS });
+        clientDataChannel = clientPeerConnection.createDataChannel('gt4-p2p', { ordered: true });
+
+        setupDataChannel(clientDataChannel, 'host');
+
+        clientPeerConnection.onicecandidate = event => {
+            if (event.candidate) {
+                publish(clientTopic(), {
+                    type: 'P2P_SIGNAL',
+                    subtype: 'CANDIDATE',
+                    candidate: event.candidate,
+                    clientId: room.clientId
+                }, true);
+            }
+        };
+
+        clientPeerConnection.createOffer().then(offer => {
+            return clientPeerConnection.setLocalDescription(offer).then(() => {
+                publish(clientTopic(), {
+                    type: 'P2P_SIGNAL',
+                    subtype: 'OFFER',
+                    sdp: offer,
+                    clientId: room.clientId
+                }, true);
+            });
+        }).catch(err => console.warn('[P2P Client Offer]', err));
+
+    } catch (error) {
+        console.warn('[P2P Init Client]', error);
+    }
+}
+
+function handleHostP2PSignal(packet) {
+    if (!isHost || !packet?.clientId || !window.RTCPeerConnection) return;
+    const clientId = packet.clientId;
+
+    if (packet.subtype === 'OFFER' && packet.sdp) {
+        try {
+            const pc = new RTCPeerConnection({ iceServers: P2P_ICE_SERVERS });
+            hostPeerConnections.set(clientId, pc);
+
+            pc.ondatachannel = event => {
+                setupDataChannel(event.channel, clientId);
+            };
+
+            pc.onicecandidate = event => {
+                if (event.candidate) {
+                    publish(hostTopic(clientId), {
+                        type: 'P2P_SIGNAL',
+                        subtype: 'CANDIDATE',
+                        candidate: event.candidate,
+                        clientId
+                    }, true);
+                }
+            };
+
+            pc.setRemoteDescription(new RTCSessionDescription(packet.sdp)).then(() => {
+                return pc.createAnswer();
+            }).then(answer => {
+                return pc.setLocalDescription(answer).then(() => {
+                    publish(hostTopic(clientId), {
+                        type: 'P2P_SIGNAL',
+                        subtype: 'ANSWER',
+                        sdp: answer,
+                        clientId
+                    }, true);
+                });
+            }).catch(err => console.warn('[P2P Host Answer]', err));
+
+        } catch (err) {
+            console.warn('[P2P Host Setup]', err);
+        }
+        return;
+    }
+
+    if (packet.subtype === 'CANDIDATE' && packet.candidate) {
+        const pc = hostPeerConnections.get(clientId);
+        if (pc) {
+            pc.addIceCandidate(new RTCIceCandidate(packet.candidate)).catch(e => console.warn('[P2P Add ICE]', e));
+        }
+        return;
+    }
+}
+
+function handleClientP2PSignal(packet) {
+    if (isHost || !clientPeerConnection) return;
+
+    if (packet.subtype === 'ANSWER' && packet.sdp) {
+        clientPeerConnection.setRemoteDescription(new RTCSessionDescription(packet.sdp))
+            .catch(err => console.warn('[P2P Client Remote Desc]', err));
+        return;
+    }
+
+    if (packet.subtype === 'CANDIDATE' && packet.candidate) {
+        clientPeerConnection.addIceCandidate(new RTCIceCandidate(packet.candidate))
+            .catch(e => console.warn('[P2P Client Add ICE]', e));
+    }
+}
+
+function setupDataChannel(channel, peerId) {
+    if (!channel) return;
+
+    channel.onopen = () => {
+        if (isHost) {
+            hostDataChannels.set(peerId, channel);
+            updateTransportUI('P2P');
+        } else {
+            updateTransportUI('P2P');
+            showToast('Kênh truyền P2P', 'Đã thiết lập kết nối trực tiếp WebRTC không độ trễ.', 'success', 4000);
+        }
+    };
+
+    channel.onclose = () => {
+        if (isHost) {
+            hostDataChannels.delete(peerId);
+            if (!hostDataChannels.size) updateTransportUI('MQTT');
+        } else {
+            updateTransportUI('MQTT');
+        }
+    };
+
+    channel.onerror = () => {
+        updateTransportUI('MQTT');
+    };
+
+    channel.onmessage = async event => {
+        try {
+            const packet = await decodePacket(event.data);
+            if (isHost) {
+                handleHostPacket(packet);
+            } else {
+                handleClientPacket(packet);
+            }
+        } catch (err) {
+            console.warn('[P2P DataChannel Message Error]', err);
+        }
+    };
+}
+
+/* =========================================================
+   3. TEXT, VALIDATION, UTILS & CRYPTO
+   ========================================================= */
 
 function cleanText(value, maxLength) {
     return String(value ?? '')
@@ -173,8 +517,7 @@ function showToast(title, message, type = 'info', duration = 4000) {
     toast.className = `toast-${type}`;
     byId('toast-progress').style.animation = 'none';
     
-    // Trigger reflow
-    void byId('toast-progress').offsetHeight;
+    void byId('toast-progress').offsetHeight; // trigger reflow
     
     byId('toast-progress').style.animation = `toastProgress ${duration}ms linear forwards`;
     requestAnimationFrame(() => toast.classList.add('show'));
@@ -203,6 +546,7 @@ function togglePasswordInput() {
     byId('guest-name-field').classList.toggle('d-none', !role);
     byId('password-field').classList.toggle('d-none', !Object.hasOwn(CLASS_PASSWORDS, role));
 }
+
 function switchToMainApp() {
     if (joined) return;
     joined = true;
@@ -238,6 +582,7 @@ function switchToMainApp() {
     
     byId('enter-to-send').checked = !matchMedia('(max-width: 768px)').matches;
     renderReport();
+    loadRoster();
 }
 
 function createLegacyInvite(roomInfo) {
@@ -393,11 +738,39 @@ async function decodePacket(message) {
     return JSON.parse(textDecoder.decode(decrypted));
 }
 
-async function publish(topic, packet) {
-    if (!mqttClient?.connected) return false;
-    
+/* Dual-Channel Publisher (WebRTC DataChannel first, MQTT fallback) */
+async function publish(topic, packet, forceMqttOnly = false) {
     try {
-        mqttClient.publish(topic, await encodePacket(packet), { qos: 1, retain: false });
+        const encoded = await encodePacket(packet);
+
+        // Try direct WebRTC P2P DataChannel if available
+        if (!forceMqttOnly) {
+            if (!isHost && clientDataChannel?.readyState === 'open') {
+                try {
+                    clientDataChannel.send(encoded);
+                    return true;
+                } catch (e) {
+                    // Fall back to MQTT
+                }
+            } else if (isHost) {
+                const match = topic.match(/host\/([^/]+)$/);
+                if (match && hostDataChannels.has(match[1])) {
+                    const chan = hostDataChannels.get(match[1]);
+                    if (chan?.readyState === 'open') {
+                        try {
+                            chan.send(encoded);
+                            return true;
+                        } catch (e) {
+                            // Fall back to MQTT
+                        }
+                    }
+                }
+            }
+        }
+
+        // MQTT transport
+        if (!mqttClient?.connected) return false;
+        mqttClient.publish(topic, encoded, { qos: 1, retain: false });
         return true;
     } catch (error) {
         console.warn('[Publish]', error);
@@ -470,8 +843,12 @@ async function createRoom() {
     saveJson(roomKey('recovery-host'), { room, user: currentUser });
     localStorage.setItem(`${STORAGE_PREFIX}:last-host`, room.id);
     
+    idbSet('meta', { key: roomKey('session-host'), value: { room, user: currentUser } });
+    idbSet('meta', { key: roomKey('recovery-host'), value: { room, user: currentUser } });
+    
     connectMQTT();
 }
+
 async function joinRoom() {
     const invite = cleanText(byId('join-pin').value, 240);
     const parsed = await parseInvite(invite);
@@ -502,6 +879,7 @@ async function joinRoom() {
     
     saveJson(roomKey('session-client'), { room, user: currentUser });
     localStorage.setItem(`${STORAGE_PREFIX}:last-client`, room.id);
+    idbSet('meta', { key: roomKey('session-client'), value: { room, user: currentUser } });
     
     queue = sanitizeQueue(loadJson(roomKey('queue'), []));
     updatePendingBadge();
@@ -517,6 +895,7 @@ async function joinRoom() {
         }
     }, 15000);
 }
+
 function connectMQTT() {
     const clientId = `gt4_${base64Url(randomBytes(10))}`;
     room.clientId = room.clientId || clientId;
@@ -576,10 +955,12 @@ function connectMQTT() {
     });
     
     mqttClient.on('close', () => {
-        updateStatus('Mất kết nối, tự thử lại...', 'red');
-        if (Date.now() - reconnectNoticeAt > 10000) {
+        if (!isP2PConnected) {
+            updateStatus('Mất kết nối MQTT, tự thử lại...', 'red');
+        }
+        if (Date.now() - reconnectNoticeAt > 10000 && !isP2PConnected) {
             reconnectNoticeAt = Date.now();
-            showToast('Mất kết nối', 'MQTT sẽ tự kết nối lại đúng broker của mã phòng.', 'warning');
+            showToast('Mất kết nối MQTT', 'Hệ thống tự thử lại; nếu P2P đang mở dữ liệu vẫn thông suốt.', 'warning');
         }
     });
     
@@ -589,6 +970,7 @@ function connectMQTT() {
     
     startHeartbeat();
 }
+
 function startHeartbeat() {
     clearInterval(heartbeatTimer);
     clearInterval(staleTimer);
@@ -615,7 +997,7 @@ function startHeartbeat() {
                 }
             }
             updateUserListUI();
-        } else if (joined && lastHostSeen && Date.now() - lastHostSeen > 30000) {
+        } else if (joined && lastHostSeen && Date.now() - lastHostSeen > 30000 && !isP2PConnected) {
             updateStatus('Host không phản hồi', 'red');
         }
     }, 5000);
@@ -642,6 +1024,11 @@ function handleHostPacket(packet) {
         }
         return;
     }
+
+    if (packet.type === 'P2P_SIGNAL') {
+        handleHostP2PSignal(packet);
+        return;
+    }
     
     if (packet.type === 'OPERATION') {
         applyHostOperation(packet);
@@ -654,8 +1041,13 @@ function handleClientPacket(packet) {
     
     if (packet.type === 'HEARTBEAT') {
         if (joined) {
-            updateStatus('Đã kết nối với Host', 'green');
+            updateStatus(isP2PConnected ? 'Đã kết nối với Host (P2P)' : 'Đã kết nối với Host', 'green');
         }
+        return;
+    }
+
+    if (packet.type === 'P2P_SIGNAL') {
+        handleClientP2PSignal(packet);
         return;
     }
     
@@ -725,12 +1117,18 @@ function acceptSync(syncedRecords) {
     
     clearTimeout(handshakeTimer);
     switchToMainApp();
-    updateStatus('Đã kết nối với Host', 'green');
+    updateStatus(isP2PConnected ? 'Đã kết nối với Host (P2P)' : 'Đã kết nối với Host', 'green');
     
     reconcileQueue();
     renderReport();
     flushQueue();
+
+    // Initiate WebRTC DataChannel P2P with Host
+    if (!isP2PConnected) {
+        initClientP2P();
+    }
 }
+
 function validateOperation(operation) {
     if (!operation || !/^[A-Za-z0-9_-]{10,80}$/.test(operation.operationId || '')) {
         return 'operationId không hợp lệ';
@@ -804,14 +1202,17 @@ function applyOperationLocally(operation) {
         const ids = new Set(records.map(item => item.id));
         const additions = dedupeAndLimit(operation.items).filter(item => !ids.has(item.id));
         records = records.concat(additions).slice(0, LIMITS.maxRecords);
+        unbackedOperationsCount += additions.length;
     } else if (operation.action === 'REMOVE') {
         records = records.filter(item => item.id !== operation.id);
+        unbackedOperationsCount++;
     } else if (operation.action === 'UPDATE') {
         const index = records.findIndex(item => item.id === operation.id);
         if (index >= 0) {
             records[index] = normalizeRecord(Object.assign({}, records[index], operation.data, {
                 id: operation.id
             }));
+            unbackedOperationsCount++;
         }
     }
 }
@@ -822,17 +1223,9 @@ function sanitizeQueue(value) {
     const operations = Array.isArray(value) ? value : [];
     
     for (const operation of operations) {
-        if (!operation) {
-            continue;
-        }
-        
-        if (seen.has(operation.operationId)) {
-            continue;
-        }
-        
-        if (validateQueuedShape(operation)) {
-            continue;
-        }
+        if (!operation) continue;
+        if (seen.has(operation.operationId)) continue;
+        if (validateQueuedShape(operation)) continue;
         
         seen.add(operation.operationId);
         result.push(operation);
@@ -868,7 +1261,7 @@ function sendOperation(action, payload) {
 }
 
 function flushQueue() {
-    if (isHost || !mqttClient?.connected || !joined) return;
+    if (isHost || !joined) return;
     clearTimeout(flushTimer);
     flushTimer = setTimeout(() => {
         queue.forEach(operation => publish(clientTopic(), operation));
@@ -891,6 +1284,7 @@ function requestSync() {
 function saveQueue() {
     if (!isHost) {
         saveJson(roomKey('queue'), queue);
+        idbSet('meta', { key: roomKey('queue'), value: queue });
     }
 }
 
@@ -902,10 +1296,13 @@ function updatePendingBadge() {
     badge.classList.toggle('d-none', !queue.length);
 }
 
-function loadHostState() {
-    const state = loadJson(roomKey('data'), null);
+async function loadHostState() {
+    let state = await idbGet('meta', roomKey('data'));
+    if (!state) {
+        state = loadJson(roomKey('data'), null);
+    }
     
-    if (state?.version === 4) {
+    if (state?.version >= 4) {
         records = dedupeAndLimit(state.records);
         processedOperations = new Set((state.processedOperations || []).slice(-1000));
         snapshots = Array.isArray(state.snapshots) ? state.snapshots.slice(-3) : loadJson(roomKey('snapshots'), []).slice(-3);
@@ -932,25 +1329,28 @@ function loadHostState() {
 function saveHostState() {
     if (!isHost) return;
     
-    saveJson(roomKey('data'), {
-        version: 4,
+    const stateObj = {
+        version: 5,
         roomId: room.id,
         updatedAt: new Date().toISOString(),
         records,
         processedOperations: [...processedOperations]
-    });
+    };
     
+    saveJson(roomKey('data'), stateObj);
     saveJson(roomKey('snapshots'), snapshots);
+
+    // Asynchronous IndexedDB write
+    idbSet('meta', { key: roomKey('data'), value: stateObj });
+    idbSet('meta', { key: roomKey('snapshots'), value: snapshots });
+    idbBulkSet('records', records);
+
+    checkAutoBackup();
 }
 
 function clearAll() {
-    if (!isHost) {
-        return;
-    }
-    
-    if (!records.length) {
-        return;
-    }
+    if (!isHost) return;
+    if (!records.length) return;
     
     if (!confirm('Xóa tất cả dữ liệu? Hệ thống sẽ tạo snapshot để hoàn tác.')) {
         return;
@@ -1013,6 +1413,110 @@ function detectViolation(value) {
     }
     return best?.label || titleCase(cleanText(value, 120) || 'Chưa xác định');
 }
+
+/* =========================================================
+   4. LOCAL ON-DEVICE AI (ROSTER, AUTOCOMPLETE & NLP)
+   ========================================================= */
+
+async function loadRoster() {
+    schoolRoster = await idbGetAll('roster');
+    updateRosterStatsUI();
+}
+
+function updateRosterStatsUI() {
+    const totalCount = schoolRoster.length;
+    const classes = new Set(schoolRoster.map(s => s.class)).size;
+
+    const totalEl = byId('roster-total-count');
+    const classEl = byId('roster-class-count');
+    const chipCountEl = byId('ai-roster-count');
+
+    if (totalEl) totalEl.textContent = String(totalCount);
+    if (classEl) classEl.textContent = String(classes);
+    if (chipCountEl) chipCountEl.textContent = `${totalCount} HS`;
+}
+
+function searchRoster(classQuery, nameQuery) {
+    if (!schoolRoster.length) return [];
+    const normalizedClass = validClass(classQuery);
+    const normalizedName = removeAccents(cleanText(nameQuery, 50).toLowerCase());
+
+    if (!normalizedClass && !normalizedName) return [];
+
+    return schoolRoster.filter(student => {
+        const classMatch = !normalizedClass || student.class === normalizedClass;
+        const nameMatch = !normalizedName || student.cleanName.includes(normalizedName);
+        return classMatch && nameMatch;
+    }).slice(0, 6);
+}
+
+function handleTextareaAutocomplete(event) {
+    const textarea = event.target;
+    const text = textarea.value;
+    const cursor = textarea.selectionStart;
+
+    // Get the current line up to the cursor
+    const lineStart = text.lastIndexOf('\n', cursor - 1) + 1;
+    const lineEnd = text.indexOf('\n', cursor);
+    const currentLine = text.slice(lineStart, lineEnd >= 0 ? lineEnd : text.length);
+
+    const classMatch = currentLine.match(CLASS_REGEX);
+    const bar = byId('ai-autocomplete-bar');
+    const list = byId('ai-suggestions-list');
+
+    if (!classMatch || !schoolRoster.length) {
+        bar?.classList.add('d-none');
+        return;
+    }
+
+    const className = validClass(classMatch[0]);
+    const afterClass = currentLine.slice(classMatch.index + classMatch[0].length).replace(/^[-–:\s]+/, '').trim();
+    const suggestions = searchRoster(className, afterClass);
+
+    if (!suggestions.length) {
+        bar?.classList.add('d-none');
+        return;
+    }
+
+    bar?.classList.remove('d-none');
+    list.replaceChildren();
+
+    suggestions.forEach(student => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'ai-suggestion-chip';
+
+        const cls = document.createElement('span');
+        cls.className = 'ai-suggestion-class';
+        cls.textContent = student.class;
+
+        const name = document.createElement('span');
+        name.textContent = student.name;
+
+        chip.append(cls, name);
+        if (student.code) {
+            const code = document.createElement('span');
+            code.className = 'ai-suggestion-code';
+            code.textContent = `(${student.code})`;
+            chip.append(code);
+        }
+
+        chip.addEventListener('click', () => {
+            // Replace the partial line with full name
+            const beforeClass = currentLine.slice(0, classMatch.index + classMatch[0].length);
+            const newLine = `${beforeClass} ${student.name} - `;
+            const newText = text.slice(0, lineStart) + newLine + (lineEnd >= 0 ? text.slice(lineEnd) : '');
+            textarea.value = newText;
+            textarea.focus();
+            const newCursor = lineStart + newLine.length;
+            textarea.setSelectionRange(newCursor, newCursor);
+            bar.classList.add('d-none');
+        });
+
+        list.append(chip);
+    });
+}
+
 function smartParse(rawText) {
     const lines = String(rawText).split(/\n+/).slice(0, LIMITS.maxItemsPerOperation);
     const output = [];
@@ -1025,31 +1529,47 @@ function smartParse(rawText) {
         if (!className) continue;
         
         let before = line.slice(0, classMatch.index).replace(/[-–]/g, ' ').trim();
-        // Remove common list/class prefixes like "1.", "2-", "Lớp", "Lop" from before
-        before = before.replace(/^(\d+[\.\)\-\:\/]\s*|l[oớ]p\s+)+/i, '').trim();
+        before = before.replace(/^(?:\d+[\.\)\-\:\/]\s*|l[oớ]p(?:\s+|$))+/i, '').trim();
         
         const after = line.slice(classMatch.index + classMatch[0].length).replace(/^[-–:\s]+/, '').trim();
         let name = before;
         let violation = after;
         
         if (!name) {
-            const split = after.split(/[-–;:]/, 2);
-            if (split.length === 2) {
-                [name, violation] = split.map(value => value.trim());
-            } else {
-                const normalized = removeAccents(after.toLowerCase());
-                let found = null;
-                for (const definition of Object.values(VIOLATION_MAP)) {
-                    for (const key of definition.keys) {
-                        const index = keywordIndex(normalized, key);
-                        if (index > 0 && (!found || index < found.index || (index === found.index && key.length > found.key.length))) {
-                            found = { index, key };
-                        }
+            let rosterMatched = false;
+            if (schoolRoster.length) {
+                const classStudents = schoolRoster.filter(s => s.class === className);
+                const normAfter = removeAccents(after.toLowerCase());
+                classStudents.sort((a, b) => b.cleanName.length - a.cleanName.length);
+                for (const student of classStudents) {
+                    if (normAfter.startsWith(student.cleanName) || normAfter.startsWith(removeAccents(student.name.toLowerCase()))) {
+                        name = student.name;
+                        violation = after.slice(student.name.length).replace(/^[-–:,\s]+/, '').trim();
+                        rosterMatched = true;
+                        break;
                     }
                 }
-                if (found) {
-                    name = after.slice(0, found.index).trim();
-                    violation = after.slice(found.index).trim();
+            }
+
+            if (!rosterMatched) {
+                const split = after.split(/[-–;:]/, 2);
+                if (split.length === 2) {
+                    [name, violation] = split.map(value => value.trim());
+                } else {
+                    const normalized = removeAccents(after.toLowerCase());
+                    let found = null;
+                    for (const definition of Object.values(VIOLATION_MAP)) {
+                        for (const key of definition.keys) {
+                            const index = keywordIndex(normalized, key);
+                            if (index > 0 && (!found || index < found.index || (index === found.index && key.length > found.key.length))) {
+                                found = { index, key };
+                            }
+                        }
+                    }
+                    if (found) {
+                        name = after.slice(0, found.index).trim();
+                        violation = after.slice(found.index).trim();
+                    }
                 }
             }
         }
@@ -1057,6 +1577,14 @@ function smartParse(rawText) {
         name = cleanText(name, 100).replace(/^[-–:.,\s]+|[-–:.,\s]+$/g, '');
         violation = cleanText(violation, 120).replace(/^[-–:.,\s]+|[-–:.,\s]+$/g, '');
         if (!name || !violation) continue;
+
+        // Local AI Fuzzy Match: if exact or near match in Roster for that class, use official student name
+        if (schoolRoster.length) {
+            const matches = searchRoster(className, name);
+            if (matches.length === 1 || (matches[0] && removeAccents(matches[0].cleanName) === removeAccents(name.toLowerCase()))) {
+                name = matches[0].name;
+            }
+        }
         
         for (const part of violation.split(/[,+]/).slice(0, 5)) {
             const cleanedPart = cleanText(part, 120).replace(/^[-–:.,\s]+|[-–:.,\s]+$/g, '');
@@ -1116,11 +1644,13 @@ function updateFilters() {
     classSelect.value = oldClass;
     violationSelect.value = oldViolation;
 }
+
 function renderReport() {
     if (!joined) return;
     clearTimeout(renderTimer);
     renderTimer = setTimeout(renderReportNow, 60);
 }
+
 function renderReportNow() {
     updateFilters();
     updatePendingBadge();
@@ -1138,6 +1668,13 @@ function renderReportNow() {
         container.append(empty);
         return;
     }
+
+    // AI Repeat Offender Frequency Analyzer
+    const studentCounts = new Map();
+    records.forEach(item => {
+        const key = `${item.name.toLowerCase()}|${item.class}`;
+        studentCounts.set(key, (studentCounts.get(key) || 0) + 1);
+    });
 
     const groups = new Map();
     filtered.forEach(item => {
@@ -1181,6 +1718,20 @@ function renderReportNow() {
             if (displaySettings.name) {
                 const cell = element('td', 'td-cell');
                 cell.append(element('span', 'student-name', item.name));
+
+                // AI Repeat Offender Badge
+                const repKey = `${item.name.toLowerCase()}|${item.class}`;
+                const count = studentCounts.get(repKey) || 1;
+                if (count >= 3) {
+                    const badge = element('span', 'repeat-badge repeat-badge-danger', `Tái phạm ${count}x`);
+                    badge.title = `Cảnh báo: Học sinh này đã vi phạm ${count} lần`;
+                    cell.append(badge);
+                } else if (count === 2) {
+                    const badge = element('span', 'repeat-badge repeat-badge-warn', 'Tái phạm 2x');
+                    badge.title = 'Học sinh này đã vi phạm 2 lần';
+                    cell.append(badge);
+                }
+
                 row.append(cell);
             }
             if (displaySettings.class) {
@@ -1220,6 +1771,7 @@ function renderReportNow() {
         container.append(group);
     });
 }
+
 function openEditModal(id) {
     const item = records.find(record => record.id === id);
     if (!item) return;
@@ -1255,14 +1807,22 @@ function updateUserListUI() {
         list.append(element('li', 'user-list-empty', 'Chưa có máy nào kết nối...'));
         return;
     }
-    for (const connection of connections.values()) {
+    for (const [clientId, connection] of connections.entries()) {
         const item = element('li', 'user-list-item');
         const identity = element('div');
         identity.append(
             element('strong', '', connection.metadata.name || 'Không tên'),
             element('small', '', ` (${connection.metadata.role || '?'})`)
         );
-        item.append(identity, element('span', 'status-dot online'));
+
+        const statusWrap = element('div', 'user-item-status');
+        if (hostDataChannels.has(clientId)) {
+            const p2pDot = element('span', 'transport-badge transport-p2p', 'P2P');
+            statusWrap.append(p2pDot);
+        }
+        statusWrap.append(element('span', 'status-dot online'));
+
+        item.append(identity, statusWrap);
         list.append(item);
     }
 }
@@ -1280,7 +1840,7 @@ function loadLibrary(globalName, src) {
 }
 
 async function getXlsx() {
-    return loadLibrary('XLSX', 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    return window.XLSX || loadLibrary('XLSX', 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
 }
 
 function downloadBlob(blob, filename) {
@@ -1288,8 +1848,10 @@ function downloadBlob(blob, filename) {
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
+    document.body.append(link);
     link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 async function exportExcel(template = false) {
@@ -1314,9 +1876,135 @@ async function exportExcel(template = false) {
     }
 }
 
+/* =========================================================
+   5. SMAS / VNEDU EXPORT & CLOUD BACKUP (0 VNĐ)
+   ========================================================= */
+
+async function exportSmasExcel() {
+    try {
+        const XLSX = await getXlsx();
+        const rows = [
+            ['STT', 'Lớp', 'Họ và tên', 'Nội dung vi phạm', 'Thời gian vi phạm', 'Người ghi nhận', 'Hình thức nhắc nhở / Xử lý'],
+            ...records.map((item, index) => [
+                index + 1,
+                item.class,
+                item.name,
+                item.violation,
+                new Date(item.time).toLocaleString('vi-VN'),
+                item.reporter,
+                'Nhắc nhở nề nếp'
+            ])
+        ];
+        
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'SoTheoDoiViPham');
+        XLSX.writeFile(workbook, `SoTheoDoiViPham_VnEdu_SMAS_${room?.id || 'offline'}.xlsx`);
+        showToast('Xuất SMAS/VnEdu thành công', 'File Excel tương thích phần mềm quản lý nhà trường đã được tạo.', 'success');
+    } catch (error) {
+        showToast('Lỗi xuất SMAS', error.message, 'error');
+    }
+}
+
+function downloadTimestampedBackup() {
+    const roomId = room?.id || 'offline';
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const backup = { format: 'giamthi-backup', version: 5, exportedAt: now.toISOString(), roomId, records };
+    downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `giamthi-backup-${roomId}-${timestamp}.json`);
+    showToast('Tải sao lưu thành công', 'Bản sao lưu kèm dấu thời gian đã được lưu vào máy.', 'success');
+}
+
+function checkAutoBackup() {
+    const now = Date.now();
+    const interval = CONFIG.backup?.autoBackupIntervalMs || 900000;
+    const threshold = CONFIG.backup?.autoBackupThreshold || 20;
+
+    if (now - lastAutoBackupTime > interval || unbackedOperationsCount >= threshold) {
+        lastAutoBackupTime = now;
+        unbackedOperationsCount = 0;
+        
+        snapshots.push({ createdAt: new Date().toISOString(), records });
+        snapshots = snapshots.slice(-5);
+        idbSet('meta', { key: roomKey('snapshots'), value: snapshots });
+
+        const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        byId('auto-backup-badge').textContent = `Auto-Backup: ${timeStr}`;
+    }
+}
+
+async function uploadToGoogleDrive() {
+    const clientId = cleanText(byId('gdrive-client-id').value, 200);
+    if (!clientId) {
+        return showToast('Google Client ID', 'Vui lòng nhập Client ID của bạn để sao lưu trực tiếp vào Drive, hoặc bấm "Tải Bản Sao Lưu" bên dưới (0 VNĐ).', 'info', 7000);
+    }
+
+    try {
+        // Load GIS client
+        await loadLibrary('google', 'https://accounts.google.com/gsi/client');
+        if (!window.google?.accounts?.oauth2) {
+            throw new Error('Google Identity Services chưa sẵn sàng');
+        }
+
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'https://www.googleapis.com/auth/drive.file',
+            callback: async response => {
+                if (response.error) {
+                    return showToast('Lỗi đăng nhập Google', response.error, 'error');
+                }
+
+                showToast('Đang tải lên Drive', 'Đang gửi file sao lưu lên Google Drive...', 'info');
+
+                const roomId = room?.id || 'offline';
+                const backupData = JSON.stringify({
+                    format: 'giamthi-backup',
+                    version: 5,
+                    exportedAt: new Date().toISOString(),
+                    roomId,
+                    records
+                }, null, 2);
+
+                const metadata = {
+                    name: `GiamThi_Backup_${roomId}_${new Date().toISOString().slice(0, 10)}.json`,
+                    mimeType: 'application/json'
+                };
+
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                form.append('file', new Blob([backupData], { type: 'application/json' }));
+
+                const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${response.access_token}` },
+                    body: form
+                });
+
+                if (res.ok) {
+                    showToast('Đã lưu lên Google Drive', 'File sao lưu đã được tải trực tiếp lên Google Drive cá nhân của bạn.', 'success');
+                    byId('gdrive-modal').classList.add('d-none');
+                } else {
+                    const err = await res.json();
+                    showToast('Lỗi Drive API', err.error?.message || 'Không thể lưu lên Google Drive', 'error');
+                }
+            }
+        });
+
+        tokenClient.requestAccessToken();
+
+    } catch (err) {
+        showToast('Lỗi Google Drive', err.message, 'error');
+    }
+}
+
+/* =========================================================
+   6. EXCEL IMPORT & BACKUP
+   ========================================================= */
+
 function normalizeHeader(value) {
     return removeAccents(cleanText(value, 80).toLowerCase()).replace(/[^a-z0-9]/g, '');
 }
+
 async function importExcel(file) {
     if (!file || file.size > LIMITS.maxExcelBytes) {
         return showToast('File không hợp lệ', `Excel tối đa ${Math.round(LIMITS.maxExcelBytes / 1048576)} MB.`, 'error');
@@ -1377,9 +2065,71 @@ async function importExcel(file) {
     }
 }
 
+async function importRoster(file) {
+    if (!file) return;
+    try {
+        const XLSX = await getXlsx();
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: '', raw: false });
+
+        if (!rows.length) throw new Error('File rỗng');
+
+        let headerRow = -1;
+        let colClass = -1;
+        let colName = -1;
+        let colCode = -1;
+
+        for (let i = 0; i < Math.min(rows.length, 10); i++) {
+            const headers = rows[i].map(normalizeHeader);
+            const classIdx = headers.findIndex(h => ['lop', 'class'].includes(h));
+            const nameIdx = headers.findIndex(h => ['hoten', 'hovaten', 'tenhocsinh', 'name'].includes(h));
+            const codeIdx = headers.findIndex(h => ['mahs', 'mahocsinh', 'code', 'stt'].includes(h));
+
+            if (classIdx >= 0 && nameIdx >= 0) {
+                headerRow = i;
+                colClass = classIdx;
+                colName = nameIdx;
+                colCode = codeIdx;
+                break;
+            }
+        }
+
+        if (headerRow < 0) throw new Error('Cần có cột "Lớp" và "Họ và tên"');
+
+        const newStudents = [];
+        for (let i = headerRow + 1; i < rows.length; i++) {
+            const row = rows[i];
+            const cls = validClass(row[colClass]);
+            const name = titleCase(cleanText(row[colName], 100));
+            const code = colCode >= 0 ? cleanText(row[colCode], 30) : '';
+
+            if (cls && name) {
+                newStudents.push({
+                    id: randomId('stu'),
+                    class: cls,
+                    name,
+                    cleanName: removeAccents(name.toLowerCase()),
+                    code
+                });
+            }
+            if (newStudents.length >= LIMITS.maxRosterStudents) break;
+        }
+
+        if (!newStudents.length) throw new Error('Không có dòng học sinh hợp lệ');
+
+        await idbClear('roster');
+        await idbBulkSet('roster', newStudents);
+        await loadRoster();
+
+        showToast('Nạp danh sách thành công', `Đã lưu ${newStudents.length} học sinh vào AI Roster cục bộ.`, 'success');
+    } catch (err) {
+        showToast('Lỗi nạp danh sách', err.message, 'error');
+    }
+}
+
 function backupJson() {
     const roomId = room?.id || 'offline';
-    const backup = { format: 'giamthi-backup', version: 4, exportedAt: new Date().toISOString(), roomId, records };
+    const backup = { format: 'giamthi-backup', version: 5, exportedAt: new Date().toISOString(), roomId, records };
     downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), `giamthi-backup-${roomId}.json`);
 }
 
@@ -1389,8 +2139,8 @@ async function restoreJson(file) {
     
     try {
         const backup = JSON.parse(await file.text());
-        if (backup.format !== 'giamthi-backup' || backup.version !== 4 || !Array.isArray(backup.records)) {
-            throw new Error('Sai định dạng backup v4');
+        if (backup.format !== 'giamthi-backup' || (backup.version !== 4 && backup.version !== 5) || !Array.isArray(backup.records)) {
+            throw new Error('Sai định dạng backup');
         }
         
         const restored = dedupeAndLimit(backup.records);
@@ -1409,9 +2159,10 @@ async function restoreJson(file) {
         showToast('Không thể phục hồi', error.message, 'error');
     }
 }
+
 async function runOcr(file) {
     if (!file || !file.type.startsWith('image/') || file.size > LIMITS.maxImageBytes) {
-        return showToast('Ảnh không hợp lệ', 'Chỉ nhận ảnh tối đa 8 MB.', 'error');
+        return showToast('Ảnh không hợp lệ', 'Chỉ nhận ảnh tối đa 10 MB.', 'error');
     }
     
     const loading = byId('ocr-loading');
@@ -1443,129 +2194,302 @@ async function runOcr(file) {
     }
 }
 
-async function exportPng() {
+function buildExportTable(items, startStt, isCompact = false) {
+    const table = document.createElement('table');
+    table.className = 'export-table';
+
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+
+    const headers = [
+        { text: 'STT', width: '42px' },
+        { text: 'Giờ', width: '70px' },
+        { text: 'Họ và Tên', width: isCompact ? '180px' : '240px' },
+        { text: 'Lớp', width: '65px' },
+        { text: 'Lỗi vi phạm', width: '' },
+        { text: 'Người báo', width: isCompact ? '110px' : '140px' }
+    ];
+
+    headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h.text;
+        if (h.width) th.style.width = h.width;
+        headRow.append(th);
+    });
+    thead.append(headRow);
+    table.append(thead);
+
+    const tbody = document.createElement('tbody');
+    items.forEach((item, index) => {
+        const row = document.createElement('tr');
+
+        const stt = document.createElement('td');
+        stt.className = 'text-center';
+        stt.textContent = String(startStt + index);
+
+        const time = document.createElement('td');
+        time.className = 'text-center';
+        time.textContent = new Date(item.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+        const name = document.createElement('td');
+        name.textContent = item.name;
+
+        const cls = document.createElement('td');
+        cls.className = 'text-center';
+        cls.textContent = item.class;
+
+        const violation = document.createElement('td');
+        violation.textContent = item.violation;
+
+        const reporter = document.createElement('td');
+        reporter.textContent = item.reporter;
+
+        row.append(stt, time, name, cls, violation, reporter);
+        tbody.append(row);
+    });
+
+    table.append(tbody);
+    return table;
+}
+
+async function exportPng(format = 'landscape') {
     const filtered = getFilteredRecords();
     if (!filtered.length) return showToast('Chưa có dữ liệu', 'Không có nội dung để xuất.', 'error');
-    
+
+    byId('png-export-modal')?.classList.add('d-none');
+    showToast('Đang tạo ảnh...', 'Đang render bảng vi phạm độ phân giải cao.', 'info', 3000);
+
     try {
-        const html2canvas = await loadLibrary('html2canvas', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-        
+        const html2canvas = window.html2canvas || await loadLibrary('html2canvas', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
         const exportTemplate = byId('export-template');
-        const tbody = byId('export-table-body');
-        
+        const container = byId('export-tables-container');
+        const pageInfo = byId('export-page-info');
+
         const now = new Date();
         byId('export-time').textContent = `Lâm Đồng, ngày ${String(now.getDate()).padStart(2, '0')} tháng ${String(now.getMonth() + 1).padStart(2, '0')} năm ${now.getFullYear()}`;
-        
-        tbody.replaceChildren();
-        filtered.forEach((item, index) => {
-            const row = document.createElement('tr');
-            
-            const stt = document.createElement('td');
-            stt.className = 'text-center';
-            stt.textContent = index + 1;
-            
-            const time = document.createElement('td');
-            time.className = 'text-center';
-            time.textContent = new Date(item.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-            
-            const name = document.createElement('td');
-            name.textContent = item.name;
-            
-            const cls = document.createElement('td');
-            cls.className = 'text-center';
-            cls.textContent = item.class;
-            
-            const violation = document.createElement('td');
-            violation.textContent = item.violation;
-            
-            const reporter = document.createElement('td');
-            reporter.textContent = item.reporter;
-            
-            row.append(stt, time, name, cls, violation, reporter);
-            tbody.append(row);
-        });
-        
-        exportTemplate.classList.add('export-active');
-        
+
+        // Ensure logo uses Base64 Data URI to prevent canvas tainting (especially under file:// or offline)
         const logo = exportTemplate.querySelector('.export-logo');
-        if (logo && !logo.complete) {
+        if (logo && window.APP_LOGO_DATA_URL) {
+            if (logo.src !== window.APP_LOGO_DATA_URL) {
+                logo.src = window.APP_LOGO_DATA_URL;
+            }
+            if (logo.decode) {
+                try {
+                    await logo.decode();
+                } catch (_) {}
+            }
+        } else if (logo && !logo.complete) {
             await new Promise(resolve => {
-                logo.onload = resolve;
-                logo.onerror = resolve;
+                const timer = setTimeout(resolve, 800);
+                logo.onload = () => { clearTimeout(timer); resolve(); };
+                logo.onerror = () => { clearTimeout(timer); resolve(); };
             });
         }
-        
-        let canvas;
-        try {
-            canvas = await html2canvas(exportTemplate, { 
-                backgroundColor: '#ffffff', 
+
+        async function renderAndDownload(filename) {
+            exportTemplate.classList.add('export-active');
+            let canvas;
+            const h2cOptions = {
+                backgroundColor: '#ffffff',
                 scale: 2,
                 useCORS: true,
-                logging: false
-            });
-        } catch (renderError) {
-            canvas = await html2canvas(exportTemplate, { 
-                backgroundColor: '#ffffff', 
-                scale: 2,
-                ignoreElements: el => el.classList?.contains('export-logo') || el.tagName === 'IMG',
-                logging: false
-            });
-        }
-        
-        exportTemplate.classList.remove('export-active');
-        
-        try {
-            canvas.toBlob(blob => {
-                if (blob) {
-                    downloadBlob(blob, `DanhSachViPham-${room?.id || 'offline'}.png`);
-                    showToast('Xuất PNG thành công', 'Đã tải về bảng danh sách vi phạm dạng ảnh.', 'success');
-                } else {
-                    showToast('Xuất PNG thất bại', 'Không thể tạo file ảnh từ canvas.', 'error');
-                }
-            }, 'image/png');
-        } catch (taintError) {
-            // If canvas was tainted (e.g. running directly via file:/// protocol)
-            exportTemplate.classList.add('export-active');
-            const fallbackCanvas = await html2canvas(exportTemplate, { 
-                backgroundColor: '#ffffff', 
-                scale: 2,
-                ignoreElements: el => el.classList?.contains('export-logo') || el.tagName === 'IMG',
-                logging: false
-            });
+                allowTaint: false,
+                logging: false,
+                scrollX: 0,
+                scrollY: 0,
+                x: 0,
+                y: 0,
+                width: exportTemplate.offsetWidth,
+                height: exportTemplate.offsetHeight,
+                windowWidth: Math.max(document.documentElement.scrollWidth, exportTemplate.scrollWidth, 1400),
+                windowHeight: Math.max(document.documentElement.scrollHeight, exportTemplate.scrollHeight, 2000)
+            };
+
+            try {
+                canvas = await html2canvas(exportTemplate, h2cOptions);
+                canvas.toDataURL('image/png');
+            } catch (renderError) {
+                // If anything fails (e.g. image taint), fallback by ignoring images
+                canvas = await html2canvas(exportTemplate, {
+                    ...h2cOptions,
+                    ignoreElements: el => el.classList?.contains('export-logo') || el.tagName === 'IMG'
+                });
+            }
             exportTemplate.classList.remove('export-active');
-            
-            fallbackCanvas.toBlob(blob => {
-                if (blob) {
-                    downloadBlob(blob, `DanhSachViPham-${room?.id || 'offline'}.png`);
-                    showToast('Đã xuất PNG (bỏ qua logo)', 'Chạy qua web server (localhost/HTTPS) để xuất kèm logo đầy đủ.', 'warning', 8000);
+
+            let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (!blob) {
+                // Fallback if toBlob returned null
+                try {
+                    const dataUrl = canvas.toDataURL('image/png');
+                    const res = await fetch(dataUrl);
+                    blob = await res.blob();
+                } catch (_) {
+                    // Direct anchor download
+                    const a = document.createElement('a');
+                    a.href = canvas.toDataURL('image/png');
+                    a.download = filename;
+                    document.body.append(a);
+                    a.click();
+                    a.remove();
+                    return;
                 }
-            }, 'image/png');
+            }
+
+            if (blob) {
+                downloadBlob(blob, filename);
+                try {
+                    if (navigator.clipboard && window.ClipboardItem) {
+                        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                    }
+                } catch (_) {
+                    // Clipboard copy may fail if focus lost
+                }
+            }
         }
-        
+
+        if (format === 'landscape') {
+            exportTemplate.classList.add('export-landscape');
+            const rowsSelect = byId('png-rows-per-page');
+            const rowsPerCol = rowsSelect ? parseInt(rowsSelect.value, 10) || 10 : 10;
+            const pageSize = rowsPerCol * 2; // Ví dụ: 10 dòng/cột x 2 cột = 20 HS/trang (chuẩn khổ ngang 16:9)
+            const totalPages = Math.ceil(filtered.length / pageSize);
+
+            if (totalPages <= 1) {
+                // Toàn bộ học sinh vừa vặn trong 1 trang ngang duy nhất
+                pageInfo.classList.add('d-none');
+                container.replaceChildren();
+
+                if (filtered.length <= 10) {
+                    container.className = 'export-tables-container';
+                    container.append(buildExportTable(filtered, 1, false));
+                } else {
+                    container.className = 'export-tables-container two-columns';
+                    const mid = Math.ceil(filtered.length / 2);
+                    const leftSlice = filtered.slice(0, mid);
+                    const rightSlice = filtered.slice(mid);
+
+                    const col1 = document.createElement('div');
+                    col1.className = 'export-table-col';
+                    col1.append(buildExportTable(leftSlice, 1, true));
+
+                    const col2 = document.createElement('div');
+                    col2.className = 'export-table-col';
+                    col2.append(buildExportTable(rightSlice, mid + 1, true));
+
+                    container.append(col1, col2);
+                }
+
+                await renderAndDownload(`DanhSachViPham_Ngang_Zalo_${room?.id || 'offline'}.png`);
+                showToast('Xuất ảnh thành công', 'Đã tải bản PNG ngang 2 cột và lưu tạm vào Clipboard! Bạn có thể dán (Ctrl+V) trực tiếp vào Zalo/Messenger.', 'success', 5000);
+            } else {
+                // Danh sách dài: Cứ đúng rowsPerCol dòng mỗi cột (mặc định 10 dòng/cột = 20 HS/trang chuẩn 16:9)
+                pageInfo.classList.remove('d-none');
+                container.className = 'export-tables-container two-columns';
+
+                for (let p = 0; p < totalPages; p++) {
+                    const startIdx = p * pageSize;
+                    const endIdx = Math.min(startIdx + pageSize, filtered.length);
+                    const pageSlice = filtered.slice(startIdx, endIdx);
+
+                    pageInfo.textContent = `(Trang ${p + 1}/${totalPages})`;
+                    container.replaceChildren();
+
+                    const startStt = startIdx + 1;
+                    const mid = Math.ceil(pageSlice.length / 2);
+                    const leftSlice = pageSlice.slice(0, mid);
+                    const rightSlice = pageSlice.slice(mid);
+
+                    const col1 = document.createElement('div');
+                    col1.className = 'export-table-col';
+                    col1.append(buildExportTable(leftSlice, startStt, true));
+
+                    const col2 = document.createElement('div');
+                    col2.className = 'export-table-col';
+                    col2.append(buildExportTable(rightSlice, startStt + mid, true));
+
+                    container.append(col1, col2);
+
+                    await renderAndDownload(`DanhSachViPham_Ngang_Zalo_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`);
+                    if (p < totalPages - 1) {
+                        await new Promise(r => setTimeout(r, 600));
+                    }
+                }
+                showToast('Xuất ảnh thành công', `Đã xuất ${totalPages} trang ảnh khổ ngang Zalo chuẩn 16:9 (${rowsPerCol} dòng/cột)!`, 'success', 5000);
+            }
+
+        } else if (format === 'paginated') {
+            exportTemplate.classList.remove('export-landscape');
+            container.className = 'export-tables-container';
+            pageInfo.classList.remove('d-none');
+
+            const pageSize = 35;
+            const totalPages = Math.ceil(filtered.length / pageSize);
+
+            for (let p = 0; p < totalPages; p++) {
+                const pageSlice = filtered.slice(p * pageSize, (p + 1) * pageSize);
+                pageInfo.textContent = `(Trang ${p + 1}/${totalPages})`;
+                container.replaceChildren(buildExportTable(pageSlice, p * pageSize + 1, false));
+
+                await renderAndDownload(`DanhSachViPham_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`);
+                if (p < totalPages - 1) {
+                    await new Promise(r => setTimeout(r, 600));
+                }
+            }
+            showToast('Xuất phân trang thành công', `Đã tải về toàn bộ ${totalPages} trang ảnh chuẩn A4.`, 'success');
+
+        } else {
+            // Vertical continuous
+            exportTemplate.classList.remove('export-landscape');
+            container.className = 'export-tables-container';
+            pageInfo.classList.add('d-none');
+            container.replaceChildren(buildExportTable(filtered, 1, false));
+
+            await renderAndDownload(`DanhSachViPham_Doc_${room?.id || 'offline'}.png`);
+            showToast('Xuất ảnh thành công', 'Đã tải về bảng danh sách vi phạm dọc liên tục.', 'success');
+        }
+
     } catch (error) {
         showToast('Xuất PNG thất bại', error.message, 'error');
-        byId('export-template').classList.remove('export-active');
+        byId('export-template')?.classList.remove('export-active');
     }
 }
 
-function logout() {
-    if (!confirm('Thoát phiên hiện tại? Dữ liệu Host vẫn được giữ theo phòng trên trình duyệt này.')) return;
+async function logout() {
+    if (!confirm('Thoát phiên hiện tại? Dữ liệu Host vẫn được lưu an toàn trong IndexedDB trên trình duyệt này.')) return;
     mqttClient?.end(true);
+    clientPeerConnection?.close();
+    hostPeerConnections.forEach(pc => pc.close());
     clearInterval(heartbeatTimer);
     clearInterval(staleTimer);
-    localStorage.removeItem(roomKey(isHost ? 'session-host' : 'session-client'));
-    if (!isHost) localStorage.removeItem(`${STORAGE_PREFIX}:last-client`);
+    const sKey = roomKey(isHost ? 'session-host' : 'session-client');
+    localStorage.removeItem(sKey);
+    await idbDelete('meta', sKey);
+    if (!isHost) {
+        localStorage.removeItem(`${STORAGE_PREFIX}:last-client`);
+        await idbDelete('meta', `${STORAGE_PREFIX}:last-client`);
+    }
     location.reload();
 }
 
 async function resumeLastHost() {
     const roomId = localStorage.getItem(`${STORAGE_PREFIX}:last-host`);
-    const session = roomId ? loadJson(`${STORAGE_PREFIX}:recovery-host:${roomId}`, null) : null;
+    let session = roomId ? await idbGet('meta', `${STORAGE_PREFIX}:recovery-host:${roomId}`) : null;
+    if (!session) {
+        session = roomId ? loadJson(`${STORAGE_PREFIX}:recovery-host:${roomId}`, null) : null;
+    }
     if (!session?.room || !session?.user) return showToast('Không thể khôi phục', 'Không tìm thấy thông tin phòng Host.', 'error');
     if (!session.room.invite && session.room.secret) session.room.invite = createLegacyInvite(session.room);
     room = session.room; currentUser = session.user; isHost = true;
-    saveJson(roomKey('session-host'), session); await setupCrypto(); connectMQTT();
+    saveJson(roomKey('session-host'), session);
+    await setupCrypto();
+    connectMQTT();
 }
+
+/* =========================================================
+   7. EVENT LISTENERS & SETUP
+   ========================================================= */
 
 document.querySelectorAll('[data-tab]').forEach(button => {
     button.addEventListener('click', () => switchTab(button.dataset.tab));
@@ -1641,8 +2565,11 @@ byId('edit-modal').addEventListener('click', event => {
 });
 
 document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !byId('edit-modal').classList.contains('d-none')) {
+    if (event.key === 'Escape') {
         closeEditModal();
+        byId('roster-modal')?.classList.add('d-none');
+        byId('gdrive-modal')?.classList.add('d-none');
+        byId('png-export-modal')?.classList.add('d-none');
     }
 });
 
@@ -1694,7 +2621,10 @@ byId('process-btn').addEventListener('click', () => {
     }
     sendOperation('ADD', { items });
     input.value = '';
+    byId('ai-autocomplete-bar')?.classList.add('d-none');
 });
+
+byId('text-input').addEventListener('input', handleTextareaAutocomplete);
 
 byId('text-input').addEventListener('keydown', event => {
     if (byId('enter-to-send').checked && event.key === 'Enter' && !event.shiftKey) {
@@ -1710,7 +2640,19 @@ byId('excel-input').addEventListener('change', event => {
 
 byId('template-excel-btn').addEventListener('click', () => exportExcel(true));
 byId('export-excel-btn').addEventListener('click', () => exportExcel(false));
-byId('export-png-btn').addEventListener('click', exportPng);
+byId('export-png-btn').addEventListener('click', () => {
+    byId('png-export-modal').classList.remove('d-none');
+});
+byId('btn-opt-landscape').addEventListener('click', () => exportPng('landscape'));
+byId('btn-opt-paginated').addEventListener('click', () => exportPng('paginated'));
+byId('btn-opt-vertical').addEventListener('click', () => exportPng('vertical'));
+byId('btn-close-png-modal').addEventListener('click', () => byId('png-export-modal').classList.add('d-none'));
+byId('png-export-modal').addEventListener('click', event => {
+    if (event.target === byId('png-export-modal')) {
+        byId('png-export-modal').classList.add('d-none');
+    }
+});
+byId('export-smas-btn').addEventListener('click', exportSmasExcel);
 
 byId('backup-json-btn').addEventListener('click', backupJson);
 
@@ -1724,6 +2666,7 @@ byId('ocr-input').addEventListener('change', event => {
     event.target.value = '';
 });
 
+// Drop zones
 const dropZone = byId('excel-drop-zone');
 dropZone.addEventListener('dragover', event => {
     event.preventDefault();
@@ -1740,6 +2683,90 @@ dropZone.addEventListener('drop', event => {
     importExcel(event.dataTransfer.files[0]);
 });
 
+// Roster Modal & Drop Zone
+function openRosterModal() {
+    byId('roster-modal').classList.remove('d-none');
+    updateRosterStatsUI();
+}
+
+byId('btn-open-roster').addEventListener('click', openRosterModal);
+byId('ai-status-chip')?.addEventListener('click', openRosterModal);
+
+byId('btn-close-roster').addEventListener('click', () => {
+    byId('roster-modal').classList.add('d-none');
+});
+
+byId('roster-modal').addEventListener('click', event => {
+    if (event.target === byId('roster-modal')) {
+        byId('roster-modal').classList.add('d-none');
+    }
+});
+
+byId('roster-file-input').addEventListener('change', event => {
+    importRoster(event.target.files[0]);
+    event.target.value = '';
+});
+
+const rosterDropZone = byId('roster-drop-zone');
+rosterDropZone.addEventListener('dragover', event => {
+    event.preventDefault();
+    rosterDropZone.classList.add('drag-over');
+});
+
+rosterDropZone.addEventListener('dragleave', () => {
+    rosterDropZone.classList.remove('drag-over');
+});
+
+rosterDropZone.addEventListener('drop', event => {
+    event.preventDefault();
+    rosterDropZone.classList.remove('drag-over');
+    importRoster(event.dataTransfer.files[0]);
+});
+
+byId('btn-clear-roster').addEventListener('click', async () => {
+    if (!confirm('Xóa toàn bộ danh sách học sinh AI đã nạp?')) return;
+    await idbClear('roster');
+    schoolRoster = [];
+    updateRosterStatsUI();
+    showToast('Đã xóa danh sách', 'Dữ liệu học sinh đã được dọn sạch.', 'info');
+});
+
+byId('btn-download-roster-template').addEventListener('click', async () => {
+    try {
+        const XLSX = await getXlsx();
+        const rows = [
+            ['STT', 'Lớp', 'Họ và tên', 'Mã học sinh'],
+            [1, '12A1', 'Nguyễn Văn An', 'HS12001'],
+            [2, '12A1', 'Trần Thị Bình', 'HS12002'],
+            [3, '11B2', 'Lê Hoàng Cúc', 'HS11015']
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'DanhSachMau');
+        XLSX.writeFile(wb, 'MauDanhSachHocSinh_AI.xlsx');
+    } catch (e) {
+        showToast('Lỗi tạo mẫu', e.message, 'error');
+    }
+});
+
+// Google Drive Modal
+byId('btn-open-gdrive').addEventListener('click', () => {
+    byId('gdrive-modal').classList.remove('d-none');
+});
+
+byId('btn-close-gdrive').addEventListener('click', () => {
+    byId('gdrive-modal').classList.add('d-none');
+});
+
+byId('gdrive-modal').addEventListener('click', event => {
+    if (event.target === byId('gdrive-modal')) {
+        byId('gdrive-modal').classList.add('d-none');
+    }
+});
+
+byId('btn-gdrive-auth-upload').addEventListener('click', uploadToGoogleDrive);
+byId('btn-instant-cloud-json').addEventListener('click', downloadTimestampedBackup);
+
+// Popover global click
 document.addEventListener('click', event => {
     if (!byId('display-menu').contains(event.target) && !byId('toggle-display-btn').contains(event.target)) {
         byId('display-menu').classList.add('d-none');
@@ -1749,6 +2776,7 @@ document.addEventListener('click', event => {
     }
 });
 
+// Speech Recognition (Voice-to-Text)
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SpeechRecognition) {
     const recognition = new SpeechRecognition();
@@ -1775,6 +2803,7 @@ if (SpeechRecognition) {
     recognition.onresult = event => {
         const value = cleanText(event.results[0][0].transcript, 500);
         byId('text-input').value = `${byId('text-input').value}${byId('text-input').value ? '\n' : ''}${value}`.slice(0, 30000);
+        byId('text-input').dispatchEvent(new Event('input'));
     };
     
     recognition.onerror = () => {
@@ -1786,6 +2815,7 @@ if (SpeechRecognition) {
     byId('mic-btn').classList.add('d-none');
 }
 
+// Clock
 setInterval(() => {
     byId('realtime-clock').textContent = new Date().toLocaleTimeString('vi-VN', { hour12: false });
 }, 1000);
@@ -1797,16 +2827,84 @@ window.addEventListener('beforeunload', event => {
     }
 });
 
+// PWA Service Worker & Install Prompt
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            reg.onupdatefound = () => {
+                const installing = reg.installing;
+                if (installing) {
+                    installing.onstatechange = () => {
+                        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                            showToast('Bản cập nhật mới', 'Trợ Lý Giám Thị đã được cập nhật phiên bản mới.', 'info');
+                        }
+                    };
+                }
+            };
+        }).catch(err => console.warn('[PWA Service Worker]', err));
+    });
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    byId('pwa-install-btn-login')?.classList.remove('d-none');
+    byId('pwa-install-btn-header')?.classList.remove('d-none');
+});
+
+function handlePwaInstall() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(choiceResult => {
+        if (choiceResult.outcome === 'accepted') {
+            showToast('Đã cài đặt ứng dụng', 'Cảm ơn bạn đã cài đặt Trợ Lý Giám Thị PWA.', 'success');
+        }
+        deferredPrompt = null;
+        byId('pwa-install-btn-login')?.classList.add('d-none');
+        byId('pwa-install-btn-header')?.classList.add('d-none');
+    });
+}
+
+byId('pwa-install-btn-login')?.addEventListener('click', handlePwaInstall);
+byId('pwa-install-btn-header')?.addEventListener('click', handlePwaInstall);
+
+window.addEventListener('online', () => {
+    byId('offline-banner')?.classList.add('d-none');
+    showToast('Đã có mạng trở lại', 'Hệ thống tự động tái đồng bộ dữ liệu.', 'success');
+    if (!mqttClient?.connected && room) {
+        connectMQTT();
+    }
+});
+
+window.addEventListener('offline', () => {
+    byId('offline-banner')?.classList.remove('d-none');
+    updateStatus('Chế độ Ngoại tuyến (Offline)', 'yellow');
+    showToast('Mất kết nối Internet', 'Dữ liệu được lưu trữ an toàn trong IndexedDB cục bộ.', 'warning');
+});
+
+// Session Restore
 (async function restoreSession() {
     if (!window.isSecureContext) {
         showToast('Môi trường không an toàn', 'Hãy dùng HTTPS hoặc localhost để bật mã hóa và Clipboard.', 'warning', 8000);
+    }
+
+    if (!navigator.onLine) {
+        byId('offline-banner')?.classList.remove('d-none');
     }
     
     const clientRoom = localStorage.getItem(`${STORAGE_PREFIX}:last-client`);
     const hostRoom = localStorage.getItem(`${STORAGE_PREFIX}:last-host`);
     
-    const clientSession = clientRoom ? loadJson(`${STORAGE_PREFIX}:session-client:${clientRoom}`, null) : null;
-    const hostSession = hostRoom ? loadJson(`${STORAGE_PREFIX}:session-host:${hostRoom}`, null) : null;
+    let clientSession = clientRoom ? await idbGet('meta', `${STORAGE_PREFIX}:session-client:${clientRoom}`) : null;
+    if (!clientSession && clientRoom) {
+        clientSession = loadJson(`${STORAGE_PREFIX}:session-client:${clientRoom}`, null);
+    }
+
+    let hostSession = hostRoom ? await idbGet('meta', `${STORAGE_PREFIX}:session-host:${hostRoom}`) : null;
+    if (!hostSession && hostRoom) {
+        hostSession = loadJson(`${STORAGE_PREFIX}:session-host:${hostRoom}`, null);
+    }
+
     const recoverySession = hostRoom ? loadJson(`${STORAGE_PREFIX}:recovery-host:${hostRoom}`, null) : null;
     
     const session = clientSession || hostSession;
