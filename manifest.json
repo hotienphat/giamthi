@@ -1,0 +1,32 @@
+{
+  "name": "Trợ Lý Giám Thị AI - Hệ Thống Trực Nề Nếp",
+  "short_name": "Giám Thị AI",
+  "description": "Hệ thống quản lý trực nề nếp thông minh, đồng bộ thời gian thực, offline-first cho trường học.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#060b18",
+  "theme_color": "#060b18",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "./element/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./element/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
