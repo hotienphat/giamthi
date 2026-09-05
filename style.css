@@ -1676,13 +1676,187 @@ select.form-input option {
 /* ── APP FADE-IN ── */
 .app-hidden { opacity: 0; pointer-events: none; }
 .app-visible { opacity: 1; pointer-events: all; transition: opacity 0.5s ease; }
-
 @media (max-width: 768px) {
-    .report-tools { grid-template-columns: 1fr 1fr; }
+    /* --- Header --- */
+    .app-header {
+        padding: 12px 14px;
+        gap: 10px;
+    }
+    .header-identity {
+        gap: 10px;
+        min-width: 0;
+    }
+    .header-display-name {
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+    }
+    .header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-start;
+    }
+    .pin-box {
+        max-width: none;
+        flex: 1 1 auto;
+        align-items: flex-start;
+        padding: 6px 12px;
+    }
+    .pin-display { font-size: 14px; letter-spacing: .05em; }
+    .clock-display {
+        font-size: 13px;
+        padding: 6px 10px;
+        order: -1;
+    }
+    .logout-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        font-size: 12px;
+    }
+
+    /* --- Report Tools (filter bar) --- */
+    .report-tools {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
     .report-tools #search-input { grid-column: 1 / -1; }
-    .header-actions { width: 100%; flex-wrap: wrap; }
-    .pin-box { max-width: 180px; align-items: flex-start; }
-    .pin-display { font-size: 13px; letter-spacing: .03em; }
+    .report-header { padding: 12px 14px; gap: 10px; }
+
+    /* --- Report Section height --- */
+    .report-section {
+        height: auto;
+        min-height: 50vh;
+        max-height: 70vh;
+    }
+
+    /* --- Table Mobile --- */
+    .violation-table { font-size: 12px; }
+    .violation-table th { padding: 8px 6px; font-size: 9px; letter-spacing: 0.04em; }
+    .violation-table td { padding: 8px 6px; }
+    .student-name { font-size: 12px; }
+    .class-badge { font-size: 10px; padding: 2px 7px; }
+    .time-cell { font-size: 11px; }
+    .reporter-cell { font-size: 10px; max-width: 60px; }
+    .stt-cell { font-size: 10px; }
+    .row-actions { opacity: 1; transform: scale(1); }
+    .action-btn { width: 26px; height: 26px; font-size: 10px; }
+
+    /* --- Input Section --- */
+    .input-section { padding: 14px; }
+    .toolbar-row { flex-wrap: wrap; gap: 6px; }
+    .input-hint { margin-left: 0; margin-top: 4px; width: 100%; font-size: 10px; }
+    .main-textarea { font-size: 12px; padding: 12px; }
+
+    /* --- Glass Cards --- */
+    .glass-card.card-pad { padding: 14px; }
+    .card-section-title { font-size: 11px; }
+    .export-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .compact-btn { padding: 8px 10px; font-size: 10px; }
+
+    /* --- Section titles --- */
+    .section-title { font-size: 13px; }
+    .section-icon-wrap { width: 24px; height: 24px; border-radius: 6px; }
+    .section-icon-wrap i { font-size: 10px !important; }
+
+    /* --- Modal --- */
+    .modal-card {
+        max-width: 95vw;
+        margin: 12px;
+        padding: 20px;
+        border-radius: var(--border-radius-lg);
+    }
+    .modal-card--wide {
+        max-width: 95vw;
+        width: 95%;
+    }
+    .modal-title { font-size: 16px; gap: 8px; }
+    .modal-icon-wrap { width: 32px; height: 32px; border-radius: 10px; }
+    .modal-desc { font-size: 12px; }
+
+    /* --- PNG Export Modal --- */
+    .png-config-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .png-config-label {
+        font-size: 11px;
+        white-space: normal;
+    }
+    .png-config-select {
+        width: 100%;
+        font-size: 11px;
+        padding: 8px 10px;
+    }
+    .png-opt-btn {
+        padding: 12px 14px;
+        gap: 12px;
+    }
+    .png-opt-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
+    }
+    .png-opt-text strong { font-size: 13px; }
+    .png-opt-text p { font-size: 11px; }
+    .png-opt-tag { font-size: 9px; padding: 2px 7px; }
+
+    /* --- Overlay modals --- */
+    .modal-overlay {
+        padding: 12px;
+        align-items: flex-start;
+        padding-top: 10vh;
+    }
+
+    /* --- Toast --- */
+    #toast {
+        top: auto;
+        bottom: 16px;
+        left: 12px;
+        right: 12px;
+        max-width: none;
+    }
+
+    /* --- User popover --- */
+    .user-popover {
+        right: -40px;
+        width: 260px;
+    }
+
+    /* --- Stats --- */
+    .stats-summary { font-size: 9px; }
+    .pending-badge { font-size: 9px; padding: 4px 7px; }
+
+    /* --- Smooth scroll --- */
+    .report-content {
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* ========== Extra small screens (iPhone SE etc.) ========== */
+@media (max-width: 400px) {
+    .app-container { padding: 8px; }
+    .app-header { padding: 10px 12px; }
+    .header-display-name { max-width: 90px; font-size: 12px; }
+    .header-logo-wrap { width: 32px; height: 32px; border-radius: 8px; }
+    .pin-display { font-size: 12px; }
+    .clock-display { font-size: 12px; padding: 5px 8px; }
+    .violation-table th { font-size: 8px; padding: 6px 4px; }
+    .violation-table td { padding: 6px 4px; }
+    .student-name { font-size: 11px; }
+    .class-badge { font-size: 9px; padding: 2px 5px; }
+    .section-title { font-size: 12px; }
+    .export-grid { grid-template-columns: 1fr; }
+    .modal-overlay { padding: 8px; padding-top: 5vh; }
+    .modal-card { padding: 16px; margin: 8px; }
+    .png-opt-btn { flex-direction: column; align-items: flex-start; text-align: left; }
+    .png-opt-tag { align-self: flex-start; }
+}
 }
 
 /* EXPORT TEMPLATE STYLES */
@@ -2226,6 +2400,5 @@ select.form-input option {
     letter-spacing: 0.04em;
     flex-shrink: 0;
 }
-
 
 
