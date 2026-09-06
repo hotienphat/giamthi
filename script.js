@@ -3005,7 +3005,14 @@ window.addEventListener('offline', () => {
     
     room = session.room;
     currentUser = session.user;
-    isHost = !clientSession;
+    // Determine role based on which session was actually restored
+    if (lastRole === 'host') {
+        isHost = true;
+    } else if (lastRole === 'client') {
+        isHost = false;
+    } else {
+        isHost = (session === hostSession);
+    }
     
     if (!room.invite && room.secret) {
         room.invite = createLegacyInvite(room);
