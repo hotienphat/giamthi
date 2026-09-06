@@ -2287,6 +2287,8 @@ async function exportPng(format = 'landscape') {
             });
         }
 
+        let currentZip = null;
+
         async function renderAndDownload(filename) {
             exportTemplate.classList.add('export-active');
             let canvas;
@@ -2326,25 +2328,36 @@ async function exportPng(format = 'landscape') {
                     const res = await fetch(dataUrl);
                     blob = await res.blob();
                 } catch (_) {
-                    // Direct anchor download
-                    const a = document.createElement('a');
-                    a.href = canvas.toDataURL('image/png');
-                    a.download = filename;
-                    document.body.append(a);
-                    a.click();
-                    a.remove();
-                    return;
+                    if (currentZip) {
+                        const dataUrl = canvas.toDataURL('image/png');
+                        const base64Data = dataUrl.replace(/^data:image\/(png|jpg);base64,/, "");
+                        currentZip.file(filename, base64Data, {base64: true});
+                        return;
+                    } else {
+                        // Direct anchor download
+                        const a = document.createElement('a');
+                        a.href = canvas.toDataURL('image/png');
+                        a.download = filename;
+                        document.body.append(a);
+                        a.click();
+                        a.remove();
+                        return;
+                    }
                 }
             }
 
             if (blob) {
-                downloadBlob(blob, filename);
-                try {
-                    if (navigator.clipboard && window.ClipboardItem) {
-                        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                if (currentZip) {
+                    currentZip.file(filename, blob);
+                } else {
+                    downloadBlob(blob, filename);
+                    try {
+                        if (navigator.clipboard && window.ClipboardItem) {
+                            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                        }
+                    } catch (_) {
+                        // Clipboard copy may fail if focus lost
                     }
-                } catch (_) {
-                    // Clipboard copy may fail if focus lost
                 }
             }
         }
@@ -2387,6 +2400,13 @@ async function exportPng(format = 'landscape') {
                 // Danh sách dài: Cứ đúng rowsPerCol dòng mỗi cột (mặc định 10 dòng/cột = 20 HS/trang chuẩn 16:9)
                 pageInfo.classList.remove('d-none');
                 container.className = 'export-tables-container two-columns';
+                
+                try {
+                    const JSZip = window.JSZip || await loadLibrary('JSZip', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+                    currentZip = new JSZip();
+                } catch (e) {
+                    showToast('Cảnh báo', 'Không thể tải thư viện JSZip. Trình duyệt có thể chặn tải nhiều file.', 'warning');
+                }
 
                 for (let p = 0; p < totalPages; p++) {
                     const startIdx = p * pageSize;
@@ -2412,11 +2432,15 @@ async function exportPng(format = 'landscape') {
                     container.append(col1, col2);
 
                     await renderAndDownload(`DanhSachViPham_Ngang_Zalo_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`);
-                    if (p < totalPages - 1) {
-                        await new Promise(r => setTimeout(r, 600));
-                    }
                 }
-                showToast('Xuất ảnh thành công', `Đã xuất ${totalPages} trang ảnh khổ ngang Zalo chuẩn 16:9 (${rowsPerCol} dòng/cột)!`, 'success', 5000);
+                
+                if (currentZip) {
+                    const zipBlob = await currentZip.generateAsync({ type: 'blob' });
+                    downloadBlob(zipBlob, `DanhSachViPham_Ngang_Zalo_${room?.id || 'offline'}.zip`);
+                    showToast('Xuất ảnh thành công', `Đã xuất file ZIP chứa ${totalPages} trang ảnh khổ ngang Zalo!`, 'success', 5000);
+                } else {
+                    showToast('Xuất ảnh thành công', `Đã xuất ${totalPages} trang ảnh khổ ngang Zalo chuẩn 16:9 (${rowsPerCol} dòng/cột)!`, 'success', 5000);
+                }
             }
 
         } else if (format === 'paginated') {
@@ -2427,17 +2451,30 @@ async function exportPng(format = 'landscape') {
             const pageSize = 35;
             const totalPages = Math.ceil(filtered.length / pageSize);
 
+            if (totalPages > 1) {
+                try {
+                    const JSZip = window.JSZip || await loadLibrary('JSZip', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+                    currentZip = new JSZip();
+                } catch (e) {
+                    showToast('Cảnh báo', 'Không thể tải thư viện JSZip. Trình duyệt có thể chặn tải nhiều file.', 'warning');
+                }
+            }
+
             for (let p = 0; p < totalPages; p++) {
                 const pageSlice = filtered.slice(p * pageSize, (p + 1) * pageSize);
                 pageInfo.textContent = `(Trang ${p + 1}/${totalPages})`;
                 container.replaceChildren(buildExportTable(pageSlice, p * pageSize + 1, false));
 
                 await renderAndDownload(`DanhSachViPham_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`);
-                if (p < totalPages - 1) {
-                    await new Promise(r => setTimeout(r, 600));
-                }
             }
-            showToast('Xuất phân trang thành công', `Đã tải về toàn bộ ${totalPages} trang ảnh chuẩn A4.`, 'success');
+            
+            if (currentZip) {
+                const zipBlob = await currentZip.generateAsync({ type: 'blob' });
+                downloadBlob(zipBlob, `DanhSachViPham_PhanTrang_${room?.id || 'offline'}.zip`);
+                showToast('Xuất phân trang thành công', `Đã tải về file ZIP chứa ${totalPages} trang ảnh chuẩn A4.`, 'success');
+            } else {
+                showToast('Xuất phân trang thành công', `Đã tải về toàn bộ ${totalPages} trang ảnh chuẩn A4.`, 'success');
+            }
 
         } else {
             // Vertical continuous
