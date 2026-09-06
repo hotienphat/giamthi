@@ -2287,9 +2287,7 @@ async function exportPng(format = 'landscape') {
             });
         }
 
-        let currentZip = null;
-
-        async function renderAndDownload(filename) {
+        async function renderToUrl() {
             exportTemplate.classList.add('export-active');
             let canvas;
             const h2cOptions = {
@@ -2321,45 +2319,47 @@ async function exportPng(format = 'landscape') {
             exportTemplate.classList.remove('export-active');
 
             let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            let url = null;
             if (!blob) {
                 // Fallback if toBlob returned null
                 try {
                     const dataUrl = canvas.toDataURL('image/png');
                     const res = await fetch(dataUrl);
                     blob = await res.blob();
+                    url = URL.createObjectURL(blob);
                 } catch (_) {
-                    if (currentZip) {
-                        const dataUrl = canvas.toDataURL('image/png');
-                        const base64Data = dataUrl.replace(/^data:image\/(png|jpg);base64,/, "");
-                        currentZip.file(filename, base64Data, {base64: true});
-                        return;
-                    } else {
-                        // Direct anchor download
-                        const a = document.createElement('a');
-                        a.href = canvas.toDataURL('image/png');
-                        a.download = filename;
-                        document.body.append(a);
-                        a.click();
-                        a.remove();
-                        return;
-                    }
+                    url = canvas.toDataURL('image/png');
                 }
+            } else {
+                url = URL.createObjectURL(blob);
             }
+            return { blob, url };
+        }
 
-            if (blob) {
-                if (currentZip) {
-                    currentZip.file(filename, blob);
-                } else {
-                    downloadBlob(blob, filename);
-                    try {
-                        if (navigator.clipboard && window.ClipboardItem) {
-                            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                        }
-                    } catch (_) {
-                        // Clipboard copy may fail if focus lost
-                    }
-                }
-            }
+        function showMultiDownloadModal(images) {
+            const listContainer = byId('multi-download-list');
+            if (!listContainer) return;
+            
+            listContainer.innerHTML = '';
+            byId('multi-download-count').textContent = images.length;
+            
+            images.forEach(img => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-primary btn-full';
+                btn.innerHTML = `<i class="fa-solid fa-download"></i> ${img.label}`;
+                btn.onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = img.url;
+                    a.download = img.filename;
+                    document.body.append(a);
+                    a.click();
+                    a.remove();
+                };
+                listContainer.appendChild(btn);
+            });
+            
+            byId('multi-download-modal').classList.remove('d-none');
+            showToast('Tạo ảnh hoàn tất', `Đã tạo ${images.length} trang ảnh. Hãy bấm vào từng nút để tải về máy!`, 'success', 6000);
         }
 
         if (format === 'landscape') {
@@ -2394,19 +2394,30 @@ async function exportPng(format = 'landscape') {
                     container.append(col1, col2);
                 }
 
-                await renderAndDownload(`DanhSachViPham_Ngang_Zalo_${room?.id || 'offline'}.png`);
+                const res = await renderToUrl();
+                const filename = `DanhSachViPham_Ngang_Zalo_${room?.id || 'offline'}.png`;
+                if (res.blob) {
+                    downloadBlob(res.blob, filename);
+                    try {
+                        if (navigator.clipboard && window.ClipboardItem) {
+                            await navigator.clipboard.write([new ClipboardItem({ 'image/png': res.blob })]);
+                        }
+                    } catch (_) {}
+                } else {
+                    const a = document.createElement('a');
+                    a.href = res.url;
+                    a.download = filename;
+                    document.body.append(a);
+                    a.click();
+                    a.remove();
+                }
                 showToast('Xuất ảnh thành công', 'Đã tải bản PNG ngang 2 cột và lưu tạm vào Clipboard! Bạn có thể dán (Ctrl+V) trực tiếp vào Zalo/Messenger.', 'success', 5000);
             } else {
-                // Danh sách dài: Cứ đúng rowsPerCol dòng mỗi cột (mặc định 10 dòng/cột = 20 HS/trang chuẩn 16:9)
+                // Danh sách dài: Cứ đúng rowsPerCol dòng mỗi cột
                 pageInfo.classList.remove('d-none');
                 container.className = 'export-tables-container two-columns';
                 
-                try {
-                    const JSZip = window.JSZip || await loadLibrary('JSZip', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-                    currentZip = new JSZip();
-                } catch (e) {
-                    showToast('Cảnh báo', 'Không thể tải thư viện JSZip. Trình duyệt có thể chặn tải nhiều file.', 'warning');
-                }
+                let generatedImages = [];
 
                 for (let p = 0; p < totalPages; p++) {
                     const startIdx = p * pageSize;
@@ -2431,16 +2442,15 @@ async function exportPng(format = 'landscape') {
 
                     container.append(col1, col2);
 
-                    await renderAndDownload(`DanhSachViPham_Ngang_Zalo_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`);
+                    const res = await renderToUrl();
+                    generatedImages.push({
+                        filename: `DanhSachViPham_Ngang_Zalo_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`,
+                        url: res.url,
+                        label: `Tải Trang ${p + 1} (Ngang Zalo)`
+                    });
                 }
                 
-                if (currentZip) {
-                    const zipBlob = await currentZip.generateAsync({ type: 'blob' });
-                    downloadBlob(zipBlob, `DanhSachViPham_Ngang_Zalo_${room?.id || 'offline'}.zip`);
-                    showToast('Xuất ảnh thành công', `Đã xuất file ZIP chứa ${totalPages} trang ảnh khổ ngang Zalo!`, 'success', 5000);
-                } else {
-                    showToast('Xuất ảnh thành công', `Đã xuất ${totalPages} trang ảnh khổ ngang Zalo chuẩn 16:9 (${rowsPerCol} dòng/cột)!`, 'success', 5000);
-                }
+                showMultiDownloadModal(generatedImages);
             }
 
         } else if (format === 'paginated') {
@@ -2450,30 +2460,31 @@ async function exportPng(format = 'landscape') {
 
             const pageSize = 35;
             const totalPages = Math.ceil(filtered.length / pageSize);
-
-            if (totalPages > 1) {
-                try {
-                    const JSZip = window.JSZip || await loadLibrary('JSZip', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-                    currentZip = new JSZip();
-                } catch (e) {
-                    showToast('Cảnh báo', 'Không thể tải thư viện JSZip. Trình duyệt có thể chặn tải nhiều file.', 'warning');
-                }
-            }
+            let generatedImages = [];
 
             for (let p = 0; p < totalPages; p++) {
                 const pageSlice = filtered.slice(p * pageSize, (p + 1) * pageSize);
                 pageInfo.textContent = `(Trang ${p + 1}/${totalPages})`;
                 container.replaceChildren(buildExportTable(pageSlice, p * pageSize + 1, false));
 
-                await renderAndDownload(`DanhSachViPham_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`);
+                const res = await renderToUrl();
+                generatedImages.push({
+                    filename: `DanhSachViPham_Trang_${p + 1}_cua_${totalPages}_${room?.id || 'offline'}.png`,
+                    url: res.url,
+                    label: `Tải Trang ${p + 1} (A4)`
+                });
             }
             
-            if (currentZip) {
-                const zipBlob = await currentZip.generateAsync({ type: 'blob' });
-                downloadBlob(zipBlob, `DanhSachViPham_PhanTrang_${room?.id || 'offline'}.zip`);
-                showToast('Xuất phân trang thành công', `Đã tải về file ZIP chứa ${totalPages} trang ảnh chuẩn A4.`, 'success');
+            if (totalPages > 1) {
+                showMultiDownloadModal(generatedImages);
             } else {
-                showToast('Xuất phân trang thành công', `Đã tải về toàn bộ ${totalPages} trang ảnh chuẩn A4.`, 'success');
+                const a = document.createElement('a');
+                a.href = generatedImages[0].url;
+                a.download = generatedImages[0].filename;
+                document.body.append(a);
+                a.click();
+                a.remove();
+                showToast('Xuất ảnh thành công', 'Đã tải ảnh chuẩn A4.', 'success');
             }
 
         } else {
@@ -2483,7 +2494,18 @@ async function exportPng(format = 'landscape') {
             pageInfo.classList.add('d-none');
             container.replaceChildren(buildExportTable(filtered, 1, false));
 
-            await renderAndDownload(`DanhSachViPham_Doc_${room?.id || 'offline'}.png`);
+            const res = await renderToUrl();
+            const filename = `DanhSachViPham_Doc_${room?.id || 'offline'}.png`;
+            if (res.blob) {
+                downloadBlob(res.blob, filename);
+            } else {
+                const a = document.createElement('a');
+                a.href = res.url;
+                a.download = filename;
+                document.body.append(a);
+                a.click();
+                a.remove();
+            }
             showToast('Xuất ảnh thành công', 'Đã tải về bảng danh sách vi phạm dọc liên tục.', 'success');
         }
 
