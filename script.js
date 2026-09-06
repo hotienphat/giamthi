@@ -842,6 +842,7 @@ async function createRoom() {
     saveJson(roomKey('session-host'), { room, user: currentUser });
     saveJson(roomKey('recovery-host'), { room, user: currentUser });
     localStorage.setItem(`${STORAGE_PREFIX}:last-host`, room.id);
+    localStorage.setItem(`${STORAGE_PREFIX}:last-role`, 'host');
     
     idbSet('meta', { key: roomKey('session-host'), value: { room, user: currentUser } });
     idbSet('meta', { key: roomKey('recovery-host'), value: { room, user: currentUser } });
@@ -879,6 +880,7 @@ async function joinRoom() {
     
     saveJson(roomKey('session-client'), { room, user: currentUser });
     localStorage.setItem(`${STORAGE_PREFIX}:last-client`, room.id);
+    localStorage.setItem(`${STORAGE_PREFIX}:last-role`, 'client');
     idbSet('meta', { key: roomKey('session-client'), value: { room, user: currentUser } });
     
     queue = sanitizeQueue(loadJson(roomKey('queue'), []));
@@ -2528,6 +2530,9 @@ async function logout() {
     if (!isHost) {
         localStorage.removeItem(`${STORAGE_PREFIX}:last-client`);
         await idbDelete('meta', `${STORAGE_PREFIX}:last-client`);
+        localStorage.setItem(`${STORAGE_PREFIX}:last-role`, 'host');
+    } else {
+        localStorage.setItem(`${STORAGE_PREFIX}:last-role`, 'client');
     }
     location.reload();
 }
@@ -2972,7 +2977,15 @@ window.addEventListener('offline', () => {
 
     const recoverySession = hostRoom ? loadJson(`${STORAGE_PREFIX}:recovery-host:${hostRoom}`, null) : null;
     
-    const session = clientSession || hostSession;
+    const lastRole = localStorage.getItem(`${STORAGE_PREFIX}:last-role`);
+    let session = null;
+    if (lastRole === 'client') {
+        session = clientSession || hostSession;
+    } else if (lastRole === 'host') {
+        session = hostSession || clientSession;
+    } else {
+        session = clientSession || hostSession;
+    }
     
     if (!session?.room || !session?.user) {
         if (recoverySession) {
