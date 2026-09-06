@@ -2711,6 +2711,12 @@ byId('png-export-modal').addEventListener('click', event => {
         byId('png-export-modal').classList.add('d-none');
     }
 });
+byId('btn-close-multi-download')?.addEventListener('click', () => byId('multi-download-modal').classList.add('d-none'));
+byId('multi-download-modal')?.addEventListener('click', event => {
+    if (event.target === byId('multi-download-modal')) {
+        byId('multi-download-modal').classList.add('d-none');
+    }
+});
 byId('export-smas-btn').addEventListener('click', exportSmasExcel);
 
 byId('backup-json-btn').addEventListener('click', backupJson);
