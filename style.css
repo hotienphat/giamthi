@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    TRỢ LÝ GIÁM THỊ AI - PREMIUM DESIGN SYSTEM
    Version 4.0 - Ultra Modern UI
    ============================================ */
@@ -1994,6 +1994,7 @@ select.form-input option {
 
 .export-signature {
     text-align: center;
+    min-height: 120px;
 }
 
 .export-signature-title {
@@ -2006,6 +2007,20 @@ select.form-input option {
     font-size: 11pt;
     font-style: italic;
     margin: 5px 0 0 0;
+}
+
+.export-signature-space {
+    height: 80px;
+}
+
+.export-signature-line {
+    font-size: 11pt;
+    margin: 0;
+    letter-spacing: 2px;
+    color: transparent;
+    border-bottom: 1px dotted #666;
+    width: 200px;
+    margin: 0 auto;
 }
 
 /* ========== Offline PWA Banner ========== */
