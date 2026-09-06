@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const CONFIG = window.GIAMTHI_CONFIG || {};
 const BROKERS = Array.isArray(CONFIG.brokers) ? CONFIG.brokers : ['wss://broker.emqx.io:8084/mqtt'];
@@ -1829,9 +1829,11 @@ function updateUserListUI() {
     }
 }
 
+const _loadingPromises = new Map();
 function loadLibrary(globalName, src) {
     if (window[globalName]) return Promise.resolve(window[globalName]);
-    return new Promise((resolve, reject) => {
+    if (_loadingPromises.has(globalName)) return _loadingPromises.get(globalName);
+    const p = new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = src;
         // script.crossOrigin = 'anonymous'; // Removed to avoid CORS issues with third-party auth scripts
@@ -1839,6 +1841,8 @@ function loadLibrary(globalName, src) {
         script.onerror = () => reject(new Error(`Không tải được ${globalName}`));
         document.head.append(script);
     });
+    _loadingPromises.set(globalName, p);
+    return p;
 }
 
 async function getXlsx() {
@@ -2361,6 +2365,11 @@ async function exportPng(format = 'landscape') {
             });
             
             byId('multi-download-modal').classList.remove('d-none');
+            // Cleanup blob URLs when modal is closed to prevent memory leak
+            const cleanup = () => {
+                images.forEach(img => { try { URL.revokeObjectURL(img.url); } catch(_) {} });
+            };
+            byId('btn-close-multi-download').addEventListener('click', cleanup, { once: true });
             showToast('Tạo ảnh hoàn tất', `Đã tạo ${images.length} trang ảnh. Hãy bấm vào từng nút để tải về máy!`, 'success', 6000);
         }
 
