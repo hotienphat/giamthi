@@ -3,16 +3,16 @@
    Version: 5.0 - Zero Cost Local Caching
    ========================================================= */
 
-const CACHE_NAME = 'giamthi-app-v5.3';
-const RUNTIME_CACHE = 'giamthi-runtime-v5.3';
+const CACHE_NAME = 'giamthi-app-v5.5';
+const RUNTIME_CACHE = 'giamthi-runtime-v5.5';
 
 const PRECACHE_URLS = [
     './',
     './index.html',
     './style.css',
-    './style.css?v=5.4',
+    './style.css?v=5.5',
     './script.js',
-    './script.js?v=5.3',
+    './script.js?v=5.5',
     './app-config.js',
     './manifest.json',
     './element/logo.png',
