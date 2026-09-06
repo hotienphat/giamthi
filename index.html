@@ -618,6 +618,29 @@
         </div>
     </div>
 
+    <!-- MULTI DOWNLOAD MODAL -->
+    <div id="multi-download-modal" class="modal-overlay d-none">
+        <div class="modal-card">
+            <h3 class="modal-title">
+                <span class="modal-icon-wrap">
+                    <i class="fa-solid fa-images" style="color:#6366f1;font-size:14px;"></i>
+                </span>
+                Tải Danh Sách Ảnh
+            </h3>
+            <p class="modal-desc">
+                Đã tạo xong <strong id="multi-download-count">0</strong> trang ảnh. Vui lòng bấm vào từng nút bên dưới để tải về điện thoại mà không bị chặn:
+            </p>
+            <div id="multi-download-list" class="form-group-stack custom-scrollbar" style="max-height: 250px; overflow-y: auto; margin-top: 12px; padding-right: 4px;">
+                <!-- Buttons injected via JS -->
+            </div>
+            <div class="modal-actions" style="margin-top:16px;">
+                <button id="btn-close-multi-download" class="btn btn-ghost modal-action-btn" type="button" onclick="document.getElementById('multi-download-modal').classList.add('d-none')">
+                    <i class="fa-solid fa-check"></i> Hoàn tất
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- EXPORT TEMPLATE -->
     <div id="export-template" class="export-template">
         <div class="export-header">
