@@ -1832,7 +1832,7 @@ function loadLibrary(globalName, src) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = src;
-        script.crossOrigin = 'anonymous';
+        // script.crossOrigin = 'anonymous'; // Removed to avoid CORS issues with third-party auth scripts
         script.onload = () => window[globalName] ? resolve(window[globalName]) : reject(new Error(`Thiếu global ${globalName}`));
         script.onerror = () => reject(new Error(`Không tải được ${globalName}`));
         document.head.append(script);
