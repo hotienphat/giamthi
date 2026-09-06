@@ -1,4 +1,4 @@
-/* =========================================================
+﻿/* =========================================================
    TRỢ LÝ GIÁM THỊ - SERVICE WORKER (OFFLINE-FIRST PWA)
    Version: 5.0 - Zero Cost Local Caching
    ========================================================= */
@@ -10,7 +10,7 @@ const PRECACHE_URLS = [
     './',
     './index.html',
     './style.css',
-    './style.css?v=5.3',
+    './style.css?v=5.4',
     './script.js',
     './script.js?v=5.3',
     './app-config.js',
