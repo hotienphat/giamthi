@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const CONFIG = window.GIAMTHI_CONFIG || {};
 const BROKERS = Array.isArray(CONFIG.brokers) ? CONFIG.brokers : ['wss://broker.emqx.io:8084/mqtt'];
@@ -19,10 +19,7 @@ const DISPLAY_KEY = `${STORAGE_PREFIX}:display`;
 const DB_NAME = CONFIG.indexedDB?.name || 'GiamThiDB_v4';
 const DB_VERSION = 2;
 
-const CLASS_PASSWORDS = {
-    '12A1': '1231', '12A2': '1232', '12A3': '1233', '12A4': '1234',
-    '12A5': '1235', '12A6': '1236', '11B1': '1131', '10C3': '1013'
-};
+
 
 const VIOLATION_MAP = {
     KHONG_MANG_THE: { label: 'Không mang thẻ học viên', keys: ['khong mang the', 'quen the', 'khong deo the', 'deo the', 'quang the', 'k the', 'ko the', 'mat the', 'thieu the', 'the hoc vien', 'the hoc sinh', 'the hs'] },
@@ -544,7 +541,7 @@ function switchTab(tab) {
 function togglePasswordInput() {
     const role = byId('join-role').value;
     byId('guest-name-field').classList.toggle('d-none', !role);
-    byId('password-field').classList.toggle('d-none', !Object.hasOwn(CLASS_PASSWORDS, role));
+
 }
 
 function switchToMainApp() {
@@ -864,9 +861,7 @@ async function joinRoom() {
         return showToast('Thiếu thông tin', 'Vui lòng chọn vai trò và nhập tên người trực.', 'error');
     }
     
-    if (Object.hasOwn(CLASS_PASSWORDS, role) && byId('join-password').value !== CLASS_PASSWORDS[role]) {
-        return showToast('Sai mật khẩu', 'Mật khẩu lớp không đúng.', 'error');
-    }
+
     
     if (!window.crypto?.getRandomValues || !window.mqtt?.connect) {
         return showToast('Thiếu thư viện', 'Trình duyệt thiếu Crypto hoặc thư viện MQTT chưa tải được.', 'error');
@@ -2346,13 +2341,16 @@ async function exportPng(format = 'landscape') {
             const listContainer = byId('multi-download-list');
             if (!listContainer) return;
             
-            listContainer.innerHTML = '';
+            listContainer.textContent = '';
             byId('multi-download-count').textContent = images.length;
             
             images.forEach(img => {
                 const btn = document.createElement('button');
                 btn.className = 'btn btn-primary btn-full';
-                btn.innerHTML = `<i class="fa-solid fa-download"></i> ${img.label}`;
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-download';
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(` ${img.label}`));
                 btn.onclick = () => {
                     const a = document.createElement('a');
                     a.href = img.url;
